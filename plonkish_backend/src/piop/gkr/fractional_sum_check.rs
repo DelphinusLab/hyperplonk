@@ -65,7 +65,7 @@ impl<F: PrimeField> Layer<F> {
         let len = 1 << self.num_vars();
         let chunk_size = div_ceil(len, num_threads()).next_power_of_two();
 
-        let mut outputs: [_; 4] = array::from_fn(|_| vec![F::ZERO; len >> 1]);
+        let mut outputs: [_; 4] = array::from_fn(|_| vec![F::zero(); len >> 1]);
         let (p, q) = outputs.split_at_mut(2);
         parallelize_iter(
             izip!(

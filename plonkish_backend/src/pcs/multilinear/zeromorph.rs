@@ -156,7 +156,7 @@ where
         let y = transcript.squeeze_challenge();
 
         let q_hat = {
-            let mut q_hat = vec![M::Scalar::ZERO; 1 << num_vars];
+            let mut q_hat = vec![M::Scalar::zero(); 1 << num_vars];
             for (idx, (power_of_y, q)) in izip!(powers(y), &quotients).enumerate() {
                 let offset = (1 << num_vars) - (1 << idx);
                 parallelize(&mut q_hat[offset..], |(q_hat, start)| {
@@ -180,14 +180,13 @@ where
         izip!(&quotients, &q_scalars).for_each(|(q, scalar)| f += (scalar, q));
 
         let comm = if cfg!(feature = "sanity-check") {
-            assert_eq!(f.evaluate(&x), M::Scalar::ZERO);
-
+            assert_eq!(f.evaluate(&x), M::Scalar::zero());
             UnivariateKzg::commit_monomial(&pp.open_pp, f.coeffs())
         } else {
             Default::default()
         };
 
-        UnivariateKzg::<M>::open(&pp.open_pp, &f, &comm, &x, &M::Scalar::ZERO, transcript)
+        UnivariateKzg::<M>::open(&pp.open_pp, &f, &comm, &x, &M::Scalar::zero(), transcript)
     }
 
     fn batch_open<'a>(
@@ -235,9 +234,9 @@ where
 
         let (eval_scalar, q_scalars) = eval_and_quotient_scalars(y, x, z, point);
 
-        let scalars = chain![[M::Scalar::ONE, z, eval_scalar * eval], q_scalars].collect_vec();
+        let scalars = chain![[M::Scalar::one(), z, eval_scalar * eval], q_scalars].collect_vec();
         let bases = chain![[q_hat_comm, comm.0, vp.g1()], q_comms].collect_vec();
-        let c = variable_base_msm(&scalars, &bases).into();
+        let c: M::G1Affine = variable_base_msm(&scalars, &bases).into();
 
         let pi = transcript.read_commitment()?;
 
@@ -271,7 +270,7 @@ fn eval_and_quotient_scalars<F: Field>(y: F, x: F, z: F, u: &[F]) -> (F, Vec<F>)
             .iter()
             .rev()
             .skip(1)
-            .scan(F::ONE, |state, power_of_x| {
+            .scan(F::one(), |state, power_of_x| {
                 *state *= power_of_x;
                 Some(*state)
             })
@@ -280,10 +279,10 @@ fn eval_and_quotient_scalars<F: Field>(y: F, x: F, z: F, u: &[F]) -> (F, Vec<F>)
         offsets_of_x
     };
     let vs = {
-        let v_numer = squares_of_x[num_vars] - F::ONE;
+        let v_numer = squares_of_x[num_vars] - F::one();
         let mut v_denoms = squares_of_x
             .iter()
-            .map(|square_of_x| *square_of_x - F::ONE)
+            .map(|square_of_x| *square_of_x - F::one())
             .collect_vec();
         v_denoms.batch_invert();
         v_denoms

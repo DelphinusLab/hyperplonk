@@ -36,8 +36,8 @@ fn lookup_h_poly<F: PrimeField + Hash>(
     beta: &F,
 ) -> [MultilinearPolynomial<F>; 2] {
     let [input, table] = compressed_polys;
-    let mut h_input = vec![F::ZERO; 1 << input.num_vars()];
-    let mut h_table = vec![F::ZERO; 1 << input.num_vars()];
+    let mut h_input = vec![F::zero(); 1 << input.num_vars()];
+    let mut h_table = vec![F::zero(); 1 << input.num_vars()];
 
     parallelize(&mut h_input, |(h_input, start)| {
         for (h_input, input) in h_input.iter_mut().zip(input[start..].iter()) {
@@ -81,7 +81,7 @@ pub(super) fn powers_of_zeta_poly<F: PrimeField>(
     num_vars: usize,
     zeta: F,
 ) -> MultilinearPolynomial<F> {
-    let powers_of_zeta = chain![[F::ZERO], powers(zeta)]
+    let powers_of_zeta = chain![[F::zero()], powers(zeta)]
         .take(1 << num_vars)
         .collect_vec();
     let nth_map = BinaryField::new(num_vars).nth_map();
@@ -105,7 +105,7 @@ where
 
     let num_cross_terms = cross_term_expressions.len();
     if accumulator.instance.u.is_zero_vartime() {
-        return vec![MultilinearPolynomial::new(vec![F::ZERO; 1 << num_vars]); num_cross_terms];
+        return vec![MultilinearPolynomial::new(vec![F::zero(); 1 << num_vars]); num_cross_terms];
     }
 
     let ev = init_hadamard_evaluator(
@@ -119,7 +119,7 @@ where
     let size = 1 << ev.num_vars;
     let chunk_size = div_ceil(size, num_threads());
 
-    let mut outputs = vec![F::ZERO; num_cross_terms * size];
+    let mut outputs = vec![F::zero(); num_cross_terms * size];
     parallelize_iter(
         outputs
             .chunks_mut(chunk_size * num_cross_terms)
@@ -155,7 +155,7 @@ where
 
     let num_cross_terms = cross_term_expressions.len();
     if accumulator.instance.u.is_zero_vartime() {
-        return vec![F::ZERO; num_cross_terms];
+        return vec![F::zero(); num_cross_terms];
     }
 
     let ev = init_hadamard_evaluator(
@@ -170,7 +170,7 @@ where
     let num_threads = num_threads();
     let chunk_size = div_ceil(size, num_threads);
 
-    let mut partial_sums = vec![vec![F::ZERO; num_cross_terms]; num_threads];
+    let mut partial_sums = vec![vec![F::zero(); num_cross_terms]; num_threads];
     parallelize_iter(
         partial_sums.iter_mut().zip((0..).step_by(chunk_size)),
         |(partial_sums, start)| {
@@ -200,7 +200,7 @@ where
     Pcs: PolynomialCommitmentScheme<F, Polynomial = MultilinearPolynomial<F>>,
 {
     if accumulator.instance.u.is_zero_vartime() {
-        return MultilinearPolynomial::new(vec![F::ZERO; 1 << num_vars]);
+        return MultilinearPolynomial::new(vec![F::zero(); 1 << num_vars]);
     }
 
     let [(acc_pow, acc_zeta, acc_u), (incoming_pow, incoming_zeta, incoming_u)] =
@@ -214,10 +214,10 @@ where
                 .unwrap();
             (pow, zeta, witness.instance.u)
         });
-    assert_eq!(incoming_u, F::ONE);
+    assert_eq!(incoming_u, F::one());
 
     let size = 1 << num_vars;
-    let mut cross_term = vec![F::ZERO; size];
+    let mut cross_term = vec![F::zero(); size];
 
     let bf = BinaryField::new(num_vars);
     let next_map = bf.rotation_map(Rotation::next());

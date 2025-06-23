@@ -104,7 +104,7 @@ pub fn rand_vanilla_plonk_circuit<F: PrimeField, R: Rotatable + From<usize>>(
     mut witness_rng: impl RngCore,
 ) -> (PlonkishCircuitInfo<F>, impl PlonkishCircuit<F>) {
     let size = 1 << num_vars;
-    let mut polys = [(); 9].map(|_| vec![F::ZERO; size]);
+    let mut polys = [(); 9].map(|_| vec![F::zero(); size]);
 
     let instances = rand_vec(num_vars, &mut witness_rng);
     polys[0] = mem::take(&mut instance_polys::<_, R>(num_vars, [&instances])[0]).into_evals();
@@ -133,9 +133,9 @@ pub fn rand_vanilla_plonk_circuit<F: PrimeField, R: Rotatable + From<usize>>(
         let q_c = F::random(&mut preprocess_rng);
         let values = if preprocess_rng.next_u32().is_even() {
             vec![
-                (1, F::ONE),
-                (2, F::ONE),
-                (4, -F::ONE),
+                (1, F::one()),
+                (2, F::one()),
+                (4, -F::one()),
                 (5, q_c),
                 (6, w_l),
                 (7, w_r),
@@ -143,8 +143,8 @@ pub fn rand_vanilla_plonk_circuit<F: PrimeField, R: Rotatable + From<usize>>(
             ]
         } else {
             vec![
-                (3, F::ONE),
-                (4, -F::ONE),
+                (3, F::one()),
+                (4, -F::one()),
                 (5, q_c),
                 (6, w_l),
                 (7, w_r),
@@ -212,11 +212,11 @@ pub fn rand_vanilla_plonk_w_lookup_circuit<F: PrimeField + Hash, R: Rotatable + 
     mut witness_rng: impl RngCore,
 ) -> (PlonkishCircuitInfo<F>, impl PlonkishCircuit<F>) {
     let size = 1 << num_vars;
-    let mut polys = [(); 13].map(|_| vec![F::ZERO; size]);
+    let mut polys = [(); 13].map(|_| vec![F::zero(); size]);
 
     let [t_l, t_r, t_o] = [(); 3].map(|_| {
         chain![
-            [F::ZERO; 2],
+            [F::zero(); 2],
             iter::repeat_with(|| F::random(&mut preprocess_rng)),
         ]
         .take(size)
@@ -265,9 +265,9 @@ pub fn rand_vanilla_plonk_w_lookup_circuit<F: PrimeField + Hash, R: Rotatable + 
         ) {
             (true, true) => {
                 vec![
-                    (1, F::ONE),
-                    (2, F::ONE),
-                    (4, -F::ONE),
+                    (1, F::one()),
+                    (2, F::one()),
+                    (4, -F::one()),
                     (5, q_c),
                     (10, w_l),
                     (11, w_r),
@@ -276,8 +276,8 @@ pub fn rand_vanilla_plonk_w_lookup_circuit<F: PrimeField + Hash, R: Rotatable + 
             }
             (true, false) => {
                 vec![
-                    (3, F::ONE),
-                    (4, -F::ONE),
+                    (3, F::one()),
+                    (4, -F::one()),
                     (5, q_c),
                     (10, w_l),
                     (11, w_r),
@@ -287,7 +287,7 @@ pub fn rand_vanilla_plonk_w_lookup_circuit<F: PrimeField + Hash, R: Rotatable + 
             (false, _) => {
                 let idx = rand_idx(1..size, &mut witness_rng);
                 vec![
-                    (6, F::ONE),
+                    (6, F::one()),
                     (10, polys[7][idx]),
                     (11, polys[8][idx]),
                     (12, polys[9][idx]),

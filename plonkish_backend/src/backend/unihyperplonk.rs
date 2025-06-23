@@ -15,7 +15,7 @@ use crate::{
     piop::multilinear_eval::ph23::{self, s_polys},
     poly::{multilinear::MultilinearPolynomial, univariate::UnivariatePolynomial},
     util::{
-        arithmetic::{powers, WithSmallOrderMulGroup},
+        arithmetic::{powers, FieldExt},
         chain, end_timer,
         expression::rotate::{Lexical, Rotatable},
         start_timer,
@@ -38,7 +38,7 @@ pub struct UniHyperPlonk<Pcs, const ADDITIVE_PCS: bool>(PhantomData<Pcs>);
 #[serde(bound(serialize = "F: Serialize", deserialize = "F: DeserializeOwned"))]
 pub struct UniHyperPlonkProverParam<F, Pcs>
 where
-    F: WithSmallOrderMulGroup<3>,
+    F: FieldExt,
     Pcs: PolynomialCommitmentScheme<F>,
 {
     pub(crate) pp: HyperPlonkProverParam<F, Pcs>,
@@ -47,7 +47,7 @@ where
 
 impl<F, Pcs> Deref for UniHyperPlonkProverParam<F, Pcs>
 where
-    F: WithSmallOrderMulGroup<3>,
+    F: FieldExt,
     Pcs: PolynomialCommitmentScheme<F>,
 {
     type Target = HyperPlonkProverParam<F, Pcs>;
@@ -61,7 +61,7 @@ where
 #[serde(bound(serialize = "F: Serialize", deserialize = "F: DeserializeOwned"))]
 pub struct UniHyperPlonkVerifierParam<F, Pcs>
 where
-    F: WithSmallOrderMulGroup<3>,
+    F: FieldExt,
     Pcs: PolynomialCommitmentScheme<F>,
 {
     pub(crate) vp: HyperPlonkVerifierParam<F, Pcs>,
@@ -69,7 +69,7 @@ where
 
 impl<F, Pcs> Deref for UniHyperPlonkVerifierParam<F, Pcs>
 where
-    F: WithSmallOrderMulGroup<3>,
+    F: FieldExt,
     Pcs: PolynomialCommitmentScheme<F>,
 {
     type Target = HyperPlonkVerifierParam<F, Pcs>;
@@ -81,7 +81,7 @@ where
 
 impl<F, Pcs> PlonkishBackend<F> for UniHyperPlonk<Pcs, true>
 where
-    F: WithSmallOrderMulGroup<3> + Hash + Serialize + DeserializeOwned,
+    F: FieldExt + Hash + Serialize + DeserializeOwned,
     Pcs: PolynomialCommitmentScheme<F, Polynomial = UnivariatePolynomial<F>>,
     Pcs::Commitment: Additive<F>,
 {
@@ -353,7 +353,7 @@ fn batch_commit<F, Pcs>(
     polys: impl IntoIterator<Item = MultilinearPolynomial<F>>,
 ) -> Result<(Vec<MultilinearPolynomial<F>>, Vec<Pcs::Commitment>), Error>
 where
-    F: WithSmallOrderMulGroup<3> + Hash + Serialize + DeserializeOwned,
+    F: FieldExt + Hash + Serialize + DeserializeOwned,
     Pcs: PolynomialCommitmentScheme<F, Polynomial = UnivariatePolynomial<F>>,
 {
     let polys = polys
@@ -377,7 +377,7 @@ fn batch_commit_and_write<F, Pcs>(
     transcript: &mut impl TranscriptWrite<Pcs::CommitmentChunk, F>,
 ) -> Result<(Vec<MultilinearPolynomial<F>>, Vec<Pcs::Commitment>), Error>
 where
-    F: WithSmallOrderMulGroup<3> + Hash + Serialize + DeserializeOwned,
+    F: FieldExt + Hash + Serialize + DeserializeOwned,
     Pcs: PolynomialCommitmentScheme<F, Polynomial = UnivariatePolynomial<F>>,
 {
     let polys = polys

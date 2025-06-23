@@ -101,7 +101,7 @@ pub fn lagrange_eval<F: PrimeField>(x: &[F], b: usize) -> F {
             if b.nth_bit(idx) {
                 *x_i
             } else {
-                F::ONE - x_i
+                F::one() - x_i
             }
         },
     ))
@@ -114,7 +114,7 @@ pub fn eq_xy_eval<F: PrimeField>(x: &[F], y: &[F]) -> F {
     product(
         x.iter()
             .zip(y)
-            .map(|(x_i, y_i)| (*x_i * y_i).double() + F::ONE - x_i - y_i),
+            .map(|(x_i, y_i)| (*x_i * y_i).double() + F::one() - x_i - y_i),
     )
 }
 
@@ -159,7 +159,7 @@ pub(super) mod test {
             let accept = {
                 let mut transcript = Keccak256Transcript::from_proof((), proof.as_slice());
                 let (x_eval, x) =
-                    S::verify(&vp, num_vars, degree, Fr::ZERO, &mut transcript).unwrap();
+                    S::verify(&vp, num_vars, degree, Fr::zero(), &mut transcript).unwrap();
                 let ys = ys.iter().map(Vec::as_slice).collect_vec();
                 x_eval == evaluate::<_, R>(&expression, num_vars, &evals, &challenges, &ys, &x)
             };
@@ -178,7 +178,7 @@ pub(super) mod test {
             expression_fn,
             param_fn,
             assignment_fn,
-            Fr::ZERO,
+            Fr::zero(),
         )
     }
 
@@ -228,8 +228,8 @@ pub(super) mod test {
                                 .into_iter()
                                 .map(|idx| {
                                     let mut polys =
-                                        MultilinearPolynomial::new(vec![Fr::ZERO; 1 << num_vars]);
-                                    polys[idx] = Fr::ONE;
+                                        MultilinearPolynomial::new(vec![Fr::zero(); 1 << num_vars]);
+                                    polys[idx] = Fr::one();
                                     polys
                                 })
                                 .collect_vec();

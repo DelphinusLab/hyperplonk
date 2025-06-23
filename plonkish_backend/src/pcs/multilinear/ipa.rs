@@ -6,10 +6,7 @@ use crate::{
     },
     poly::multilinear::MultilinearPolynomial,
     util::{
-        arithmetic::{
-            batch_projective_to_affine, variable_base_msm, Curve, CurveAffine, CurveExt, Group,
-        },
-        parallel::parallelize,
+        arithmetic::{variable_base_msm, Curve, CurveAffine},
         transcript::{TranscriptRead, TranscriptWrite},
         Deserialize, DeserializeOwned, Either, Itertools, Serialize,
     },
@@ -92,27 +89,28 @@ where
     type Commitment = MultilinearIpaCommitment<C>;
     type CommitmentChunk = C;
 
-    fn setup(poly_size: usize, _: usize, _: impl RngCore) -> Result<Self::Param, Error> {
-        assert!(poly_size.is_power_of_two());
-        let num_vars = poly_size.ilog2() as usize;
-
-        let g = {
-            let mut g = vec![C::Curve::identity(); poly_size];
-            parallelize(&mut g, |(g, start)| {
-                let hasher = C::CurveExt::hash_to_curve("MultilinearIpa::setup");
-                for (g, idx) in g.iter_mut().zip(start as u32..) {
-                    let mut message = [0u8; 5];
-                    message[1..5].copy_from_slice(&idx.to_le_bytes());
-                    *g = hasher(&message);
-                }
-            });
-            batch_projective_to_affine(&g)
-        };
-
-        let hasher = C::CurveExt::hash_to_curve("MultilinearIpa::setup");
-        let h = hasher(&[1]).to_affine();
-
-        Ok(Self::Param { num_vars, g, h })
+    fn setup(_poly_size: usize, _: usize, _: impl RngCore) -> Result<Self::Param, Error> {
+        // assert!(poly_size.is_power_of_two());
+        // let num_vars = poly_size.ilog2() as usize;
+        //
+        // let g = {
+        //     let mut g = vec![C::Curve::identity(); poly_size];
+        //     parallelize(&mut g, |(g, start)| {
+        //         let hasher = C::CurveExt::hash_to_curve("MultilinearIpa::setup");
+        //         for (g, idx) in g.iter_mut().zip(start as u32..) {
+        //             let mut message = [0u8; 5];
+        //             message[1..5].copy_from_slice(&idx.to_le_bytes());
+        //             *g = hasher(&message);
+        //         }
+        //     });
+        //     batch_projective_to_affine(&g)
+        // };
+        //
+        // let hasher = C::CurveExt::hash_to_curve("MultilinearIpa::setup");
+        // let h = hasher(&[1]).to_affine();
+        //
+        // Ok(Self::Param { num_vars, g, h })
+        unimplemented!()
     }
 
     fn trim(

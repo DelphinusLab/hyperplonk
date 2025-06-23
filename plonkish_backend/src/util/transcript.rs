@@ -6,7 +6,7 @@ use crate::{
     },
     Error,
 };
-use halo2_curves::{bn256, grumpkin, pasta};
+use halo2_proofs::pairing::bn256;
 use std::{
     fmt::Debug,
     io::{self, Cursor},
@@ -230,12 +230,7 @@ macro_rules! impl_fs_transcript_curve_commitment {
     };
 }
 
-impl_fs_transcript_curve_commitment!(
-    bn256::G1Affine,
-    grumpkin::G1Affine,
-    pasta::EpAffine,
-    pasta::EqAffine,
-);
+impl_fs_transcript_curve_commitment!(bn256::G1Affine,);
 
 impl<F: PrimeField, S> Transcript<Output<Keccak256>, F> for Keccak256Transcript<S> {
     fn common_commitment(&mut self, comm: &Output<Keccak256>) -> Result<(), Error> {

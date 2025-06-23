@@ -31,7 +31,7 @@ pub(super) fn prove_zero_check<F: PrimeField>(
     prove_sum_check(
         num_instance_poly,
         expression,
-        F::ZERO,
+        F::zero(),
         polys,
         challenges,
         y,

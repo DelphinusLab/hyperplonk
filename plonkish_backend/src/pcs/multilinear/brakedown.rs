@@ -130,7 +130,7 @@ where
 
         let row_len = pp.brakedown.row_len();
         let codeword_len = pp.brakedown.codeword_len();
-        let mut rows = vec![F::ZERO; pp.num_rows * codeword_len];
+        let mut rows = vec![F::zero(); pp.num_rows * codeword_len];
 
         // encode rows
         let chunk_size = div_ceil(pp.num_rows, num_threads());
@@ -231,7 +231,7 @@ where
                         .iter_mut()
                         .zip(offset..)
                         .for_each(|(combined, column)| {
-                            *combined = F::ZERO;
+                            *combined = F::zero();
                             coeffs
                                 .iter()
                                 .zip(poly.evals().iter().skip(column).step_by(row_len))
@@ -241,7 +241,7 @@ where
                         })
                 });
             };
-            let mut combined_row = vec![F::ZERO; row_len];
+            let mut combined_row = vec![F::zero(); row_len];
             for _ in 0..pp.brakedown.num_proximity_testing() {
                 let coeffs = transcript.squeeze_challenges(pp.num_rows);
                 combine(&mut combined_row, &coeffs);
@@ -329,13 +329,13 @@ where
         if vp.num_rows > 1 {
             let coeffs = transcript.squeeze_challenges(vp.num_rows);
             let mut combined_row = transcript.read_field_elements(row_len)?;
-            combined_row.resize(codeword_len, F::ZERO);
+            combined_row.resize(codeword_len, F::zero());
             vp.brakedown.encode(&mut combined_row);
             combined_rows.push((coeffs, combined_row));
         }
         combined_rows.push({
             let mut combined_row = transcript.read_field_elements(row_len)?;
-            combined_row.resize(codeword_len, F::ZERO);
+            combined_row.resize(codeword_len, F::zero());
             vp.brakedown.encode(&mut combined_row);
             (t_0, combined_row)
         });

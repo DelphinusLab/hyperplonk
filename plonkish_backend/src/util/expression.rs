@@ -302,11 +302,11 @@ impl<F: Clone> From<CommonPolynomial> for Expression<F> {
 
 impl<F: Field> Expression<F> {
     pub fn zero() -> Self {
-        Expression::Constant(F::ZERO)
+        Expression::Constant(F::zero())
     }
 
     pub fn one() -> Self {
-        Expression::Constant(F::ONE)
+        Expression::Constant(F::one())
     }
 
     pub fn simplified(&self, challenges: Option<&[F]>) -> Option<Expression<F>> {
@@ -321,11 +321,11 @@ impl<F: Field> Expression<F> {
             fn into_simplified(self) -> Self {
                 match self {
                     Case::Scaled(scalar, constant, expression) => {
-                        if scalar == F::ZERO {
-                            Case::Constant(F::ZERO)
-                        } else if scalar == F::ONE {
+                        if scalar == F::zero() {
+                            Case::Constant(F::zero())
+                        } else if scalar == F::one() {
                             Case::Sum(constant, expression)
-                        } else if scalar == -F::ONE {
+                        } else if scalar == -F::one() {
                             Case::Sum(-constant, -expression)
                         } else {
                             Case::Scaled(scalar, constant, expression)
@@ -339,14 +339,14 @@ impl<F: Field> Expression<F> {
                 match self {
                     Case::Constant(constant) => Some(Expression::Constant(constant)),
                     Case::Sum(constant, expression) => {
-                        if constant == F::ZERO {
+                        if constant == F::zero() {
                             Some(expression)
                         } else {
                             Some(expression + Expression::Constant(constant))
                         }
                     }
                     Case::Scaled(scalar, constant, expression) => {
-                        debug_assert!(![F::ZERO, F::ONE, -F::ONE].contains(&scalar));
+                        debug_assert!(![F::zero(), F::one(), -F::one()].contains(&scalar));
                         Case::Sum(scalar * constant, expression * scalar).into_expression()
                     }
                 }
@@ -427,11 +427,11 @@ impl<F: Field> Expression<F> {
                         Case::Scaled(lhs * rhs, constant, expression)
                     }
                     (lhs, rhs) => match (lhs.into_expression(), rhs.into_expression()) {
-                        (Some(lhs), Some(rhs)) => Case::Sum(F::ZERO, lhs * rhs),
+                        (Some(lhs), Some(rhs)) => Case::Sum(F::zero(), lhs * rhs),
                         (Some(expression), None) | (None, Some(expression)) => {
-                            Case::Sum(F::ZERO, expression)
+                            Case::Sum(F::zero(), expression)
                         }
-                        (None, None) => Case::Constant(F::ZERO),
+                        (None, None) => Case::Constant(F::zero()),
                     },
                 }
                 .into_simplified()
@@ -455,12 +455,12 @@ impl<F: Field> Expression<F> {
 
         self.evaluate(
             &|constant| Case::Constant(constant),
-            &|poly| Case::Sum(F::ZERO, poly.into()),
-            &|query| Case::Sum(F::ZERO, query.into()),
+            &|poly| Case::Sum(F::zero(), poly.into()),
+            &|query| Case::Sum(F::zero(), query.into()),
             &|challenge| {
                 challenges
                     .map(|challenges| Case::Constant(challenges[challenge]))
-                    .unwrap_or_else(|| Case::Sum(F::ZERO, Expression::Challenge(challenge)))
+                    .unwrap_or_else(|| Case::Sum(F::zero(), Expression::Challenge(challenge)))
             },
             &|case| -case,
             &|lhs, rhs| lhs + rhs,

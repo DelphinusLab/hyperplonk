@@ -288,7 +288,7 @@ where
         let poly = if pp.num_chunks() == 1 {
             Cow::Borrowed(poly)
         } else {
-            let mut coeffs = vec![C::Scalar::ZERO; row_len];
+            let mut coeffs = vec![C::Scalar::zero(); row_len];
             if let Some(row) = poly.coeffs().chunks(row_len).next() {
                 coeffs[..row.len()].copy_from_slice(row);
             }

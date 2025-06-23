@@ -63,7 +63,7 @@ impl<'a, F: PrimeField, R: Rotatable + From<usize>> HadamardEvaluator<'a, F, R> 
         cache[self.reg.offsets().lagranges()..]
             .iter_mut()
             .zip(&self.lagranges)
-            .for_each(|(value, i)| *value = if &b == i { F::ONE } else { F::ZERO });
+            .for_each(|(value, i)| *value = if &b == i { F::one() } else { F::zero() });
         cache[self.reg.offsets().polys()..]
             .iter_mut()
             .zip(self.reg.polys())

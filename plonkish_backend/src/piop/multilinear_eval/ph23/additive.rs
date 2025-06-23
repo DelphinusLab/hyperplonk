@@ -3,9 +3,7 @@ use crate::{
     piop::multilinear_eval::ph23::{additive::QueryGroup::*, s_evals, vanishing_eval},
     poly::{multilinear::MultilinearPolynomial, univariate::UnivariatePolynomial},
     util::{
-        arithmetic::{
-            inner_product, powers, product, BatchInvert, Msm, PrimeField, WithSmallOrderMulGroup,
-        },
+        arithmetic::{inner_product, powers, product, BatchInvert, FieldExt, Msm, PrimeField},
         chain, end_timer,
         expression::{
             evaluator::quotient::{QuotientEvaluator, Radix2Domain},
@@ -34,7 +32,7 @@ pub fn prove_multilinear_eval<'a, F, Pcs>(
     transcript: &mut impl TranscriptWrite<Pcs::CommitmentChunk, F>,
 ) -> Result<(), Error>
 where
-    F: WithSmallOrderMulGroup<3>,
+    F: FieldExt,
     Pcs: PolynomialCommitmentScheme<F, Polynomial = UnivariatePolynomial<F>>,
     Pcs::Commitment: 'a + Additive<F>,
 {
@@ -80,7 +78,7 @@ where
 
         let timer = start_timer(|| "quotient");
         let ev = QuotientEvaluator::new(domain, &expression, Default::default(), polys);
-        let mut q = vec![F::ZERO; domain.extended_n()];
+        let mut q = vec![F::zero(); domain.extended_n()];
         parallelize(&mut q, |(q, start)| {
             let mut cache = ev.cache();
             izip!(q, start..).for_each(|(q, row)| ev.evaluate(q, &mut cache, row));
@@ -146,7 +144,7 @@ pub fn verify_multilinear_eval<'a, F, Pcs>(
     transcript: &mut impl TranscriptRead<Pcs::CommitmentChunk, F>,
 ) -> Result<(), Error>
 where
-    F: WithSmallOrderMulGroup<3>,
+    F: FieldExt,
     Pcs: PolynomialCommitmentScheme<F, Polynomial = UnivariatePolynomial<F>>,
     Pcs::Commitment: 'a + Additive<F>,
 {
@@ -161,7 +159,7 @@ where
     let query_groups = query_groups(num_vars, &queries, &powers_of_gamma);
 
     let u_step = -domain.n_inv() * inner_product(&powers_of_gamma, &evals);
-    let eq_0 = product(point.iter().map(|point_i| F::ONE - point_i));
+    let eq_0 = product(point.iter().map(|point_i| F::one() - point_i));
 
     let eq_u_comm = Pcs::read_commitments(vp, 2, transcript)?;
 
@@ -328,7 +326,7 @@ fn eq_u<F: PrimeField>(
     let lexical = Lexical::new(point.len());
     let eq = MultilinearPolynomial::eq_xy(point).into_evals();
     let sums = {
-        let mut coeffs = vec![F::ZERO; lexical.n()];
+        let mut coeffs = vec![F::zero(); lexical.n()];
         izip!(query_groups, polys).for_each(|(group, poly)| match group {
             ByPoly {
                 rotations, scalars, ..
@@ -352,11 +350,16 @@ fn eq_u<F: PrimeField>(
         coeffs
     };
     let u = chain![&sums]
-        .scan(F::ZERO, |u, sum| mem::replace(u, *u + sum + u_step).into())
+        .scan(F::zero(), |u, sum| {
+            mem::replace(u, *u + sum + u_step).into()
+        })
         .collect_vec();
 
     if cfg!(feature = "sanity-check") {
-        assert_eq!(F::ZERO, u[lexical.nth(-1)] + sums[lexical.nth(-1)] + u_step);
+        assert_eq!(
+            F::zero(),
+            u[lexical.nth(-1)] + sums[lexical.nth(-1)] + u_step
+        );
     }
 
     (eq, u)
@@ -372,7 +375,7 @@ fn expression<F: PrimeField>(
     let num_vars = point.len();
     let [u_step, eq_0, alpha] = &[u_step, eq_0, alpha].map(Expression::Constant);
     let eq_ratios = {
-        let mut denoms = point.iter().map(|point_i| F::ONE - point_i).collect_vec();
+        let mut denoms = point.iter().map(|point_i| F::one() - point_i).collect_vec();
         denoms.batch_invert();
         izip!(point, denoms)
             .map(|(numer, denom)| denom * numer)
@@ -438,7 +441,7 @@ fn linearization<'a, F: PrimeField, T: Additive<F> + 'a>(
         .evaluate()
 }
 
-fn points_evals<F: WithSmallOrderMulGroup<3>>(
+fn points_evals<F: FieldExt>(
     domain: &Radix2Domain<F>,
     x: F,
     evals: &[(Query, F)],
@@ -494,7 +497,7 @@ mod test {
 
     fn run_prove_verify<F, Pcs>(num_vars: usize)
     where
-        F: WithSmallOrderMulGroup<3>,
+        F: FieldExt,
         Pcs: PolynomialCommitmentScheme<F, Polynomial = UnivariatePolynomial<F>>,
         Pcs::Commitment: Additive<F>,
         Keccak256Transcript<Cursor<Vec<u8>>>: TranscriptRead<Pcs::CommitmentChunk, F>

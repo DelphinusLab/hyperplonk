@@ -172,11 +172,11 @@ where
         let g1 = M::G1Affine::generator();
         let eqs = {
             let mut eqs = Vec::with_capacity(1 << (num_vars + 1));
-            eqs.push(vec![M::Scalar::ONE]);
+            eqs.push(vec![M::Scalar::one()]);
 
             for s_i in ss.iter() {
                 let last_evals = eqs.last().unwrap();
-                let mut evals = vec![M::Scalar::ZERO; 2 * last_evals.len()];
+                let mut evals = vec![M::Scalar::zero(); 2 * last_evals.len()];
 
                 let (evals_lo, evals_hi) = evals.split_at_mut(last_evals.len());
 

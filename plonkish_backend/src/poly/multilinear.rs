@@ -129,9 +129,9 @@ impl<F: Field> MultilinearPolynomial<F> {
             }
         };
 
-        let mut evals = vec![F::ONE];
+        let mut evals = vec![F::one()];
         for y_i in y.iter().rev() {
-            let mut next_evals = vec![F::ZERO; 2 * evals.len()];
+            let mut next_evals = vec![F::zero(); 2 * evals.len()];
             if evals.len() < 32 {
                 expand_serial(&mut next_evals, &evals, y_i);
             } else {
@@ -209,7 +209,7 @@ impl<F: Field> MultilinearPolynomial<F> {
 
         let distance = rotation.distance();
         let num_x = self.num_vars - distance;
-        let mut evals = vec![F::ZERO; 1 << distance];
+        let mut evals = vec![F::zero(); 1 << distance];
         let chunk_size = div_ceil(evals.len(), num_threads());
         if rotation < Rotation::cur() {
             let x = &x[distance..];
@@ -310,7 +310,7 @@ impl<F: Field, BF: Borrow<F>, P: Borrow<MultilinearPolynomial<F>>> AddAssign<(BF
 {
     fn add_assign(&mut self, (scalar, rhs): (BF, P)) {
         let (scalar, rhs) = (scalar.borrow(), rhs.borrow());
-        match (self.is_empty(), rhs.is_empty() | (scalar == &F::ZERO)) {
+        match (self.is_empty(), rhs.is_empty() | (scalar == &F::zero())) {
             (_, true) => {}
             (true, false) => {
                 *self = rhs.clone();
@@ -319,9 +319,9 @@ impl<F: Field, BF: Borrow<F>, P: Borrow<MultilinearPolynomial<F>>> AddAssign<(BF
             (false, false) => {
                 assert_eq!(self.num_vars, rhs.num_vars);
 
-                if scalar == &F::ONE {
+                if scalar == &F::one() {
                     *self += rhs;
-                } else if scalar == &-F::ONE {
+                } else if scalar == &-F::one() {
                     *self -= rhs;
                 } else {
                     parallelize(&mut self.evals, |(lhs, start)| {
@@ -352,7 +352,7 @@ impl<F: Field, P: Borrow<MultilinearPolynomial<F>>> SubAssign<P> for Multilinear
             (_, true) => {}
             (true, false) => {
                 *self = rhs.clone();
-                *self *= &-F::ONE;
+                *self *= &-F::one();
             }
             (false, false) => {
                 assert_eq!(self.num_vars, rhs.num_vars);
@@ -388,15 +388,15 @@ impl<F: Field, BF: Borrow<F>> Mul<BF> for &MultilinearPolynomial<F> {
 impl<F: Field, BF: Borrow<F>> MulAssign<BF> for MultilinearPolynomial<F> {
     fn mul_assign(&mut self, rhs: BF) {
         let rhs = rhs.borrow();
-        if rhs == &F::ZERO {
-            self.evals = vec![F::ZERO; self.evals.len()]
-        } else if rhs == &-F::ONE {
+        if rhs == &F::zero() {
+            self.evals = vec![F::zero(); self.evals.len()]
+        } else if rhs == &-F::one() {
             parallelize(&mut self.evals, |(evals, _)| {
                 for eval in evals.iter_mut() {
                     *eval = -*eval;
                 }
             });
-        } else if rhs != &F::ONE {
+        } else if rhs != &F::one() {
             parallelize(&mut self.evals, |(lhs, _)| {
                 for lhs in lhs.iter_mut() {
                     *lhs *= rhs;
@@ -448,8 +448,8 @@ pub(crate) fn evaluate<F: Field>(evals: &[F], x: &[F]) -> F {
     let mut bits = Vec::new();
     let mut buf = Vec::with_capacity(evals.len() >> 1);
     for x_i in x.iter() {
-        if x_i == &F::ZERO || x_i == &F::ONE {
-            bits.push(x_i == &F::ONE);
+        if x_i == &F::zero() || x_i == &F::one() {
+            bits.push(x_i == &F::one());
             continue;
         }
 
@@ -604,14 +604,14 @@ pub(crate) fn rotation_eval_coeff_pattern<const NEXT: bool>(
 }
 
 fn flip<F: Field>(x: &F) -> F {
-    F::ONE - x
+    F::one() - x
 }
 
 fn bit_to_field<F: Field>(bit: bool) -> F {
     if bit {
-        F::ONE
+        F::one()
     } else {
-        F::ZERO
+        F::zero()
     }
 }
 
@@ -638,7 +638,7 @@ pub(crate) fn merge_into<F: Field>(
     skip: usize,
 ) {
     assert!(target.capacity() >= evals.len() >> distance);
-    target.resize(evals.len() >> distance, F::ZERO);
+    target.resize(evals.len() >> distance, F::zero());
 
     let step = 1 << distance;
     parallelize(target, |(target, start)| {
@@ -697,8 +697,8 @@ mod test {
     #[test]
     fn fix_var() {
         let rand_x_i = || match OsRng.next_u32() % 3 {
-            0 => Fr::ZERO,
-            1 => Fr::ONE,
+            0 => Fr::zero(),
+            1 => Fr::one(),
             2 => Fr::random(OsRng),
             _ => unreachable!(),
         };

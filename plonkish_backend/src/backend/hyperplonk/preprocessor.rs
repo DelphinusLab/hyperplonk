@@ -149,10 +149,10 @@ pub(super) fn max_degree<F: PrimeField>(
         let dummy_challenge = Expression::zero();
         Cow::Owned(self::lookup_constraints(circuit_info, &dummy_challenge, &dummy_challenge).0)
     });
+    // should not count in cs' degree due to hyperplonk's all constrains not count cs' lookup/shuffle constrains
     chain![
         circuit_info.constraints.iter().map(Expression::degree),
         lookup_constraints.iter().map(Expression::degree),
-        circuit_info.max_degree,
         [2],
     ]
     .max()

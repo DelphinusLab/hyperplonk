@@ -104,7 +104,7 @@ where
                 let f_last = fs.last().unwrap();
                 let x_last = point.last().unwrap();
                 assert_eq!(
-                    f_last[0] * (M::Scalar::ONE - x_last) + f_last[1] * x_last,
+                    f_last[0] * (M::Scalar::one() - x_last) + f_last[1] * x_last,
                     *eval
                 );
             }
@@ -172,7 +172,7 @@ where
 
         let evals = transcript.read_field_elements(num_vars)?;
 
-        let one = M::Scalar::ONE;
+        let one = M::Scalar::one();
         let two = one.double();
         let eval_0 = evals.iter().zip(&squares_of_beta).zip(point).rev().fold(
             *eval,

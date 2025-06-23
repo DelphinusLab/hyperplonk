@@ -136,7 +136,7 @@ impl<F: Field> UnivariatePolynomial<F> {
         assert!(!points.is_empty());
 
         let mut buf;
-        let mut coeffs = vec![F::ZERO; points.len() + 1];
+        let mut coeffs = vec![F::zero(); points.len() + 1];
         *coeffs.last_mut().unwrap() = scalar;
         for (point, len) in points.into_iter().zip(2..) {
             buf = scalar;
@@ -161,7 +161,7 @@ impl<F: Field> UnivariatePolynomial<F> {
         }
 
         let chunk_size = div_ceil(self.coeffs().len(), num_threads);
-        let mut results = vec![F::ZERO; num_threads];
+        let mut results = vec![F::zero(); num_threads];
         parallelize_iter(
             results
                 .iter_mut()
@@ -169,7 +169,7 @@ impl<F: Field> UnivariatePolynomial<F> {
                 .zip(powers(x.pow_vartime([chunk_size as u64]))),
             |((result, coeffs), scalar)| *result = horner(coeffs, x) * scalar,
         );
-        results.iter().fold(F::ZERO, |acc, result| acc + result)
+        results.iter().fold(F::zero(), |acc, result| acc + result)
     }
 
     pub fn div_rem(&self, divisor: &Self) -> (Self, Self) {
@@ -183,7 +183,7 @@ impl<F: Field> UnivariatePolynomial<F> {
                     return (Self::zero(), self.clone());
                 }
 
-                let mut quotient = vec![F::ZERO; self.degree() - divisor.degree() + 1];
+                let mut quotient = vec![F::zero(); self.degree() - divisor.degree() + 1];
                 let mut remainder = self.clone();
                 let divisor_leading_inv = divisor.coeffs().last().unwrap().invert().unwrap();
                 while remainder.degree() >= divisor.degree() {
@@ -280,11 +280,11 @@ impl<F: Field, BF: Borrow<F>, P: Borrow<UnivariatePolynomial<F>>> AddAssign<(BF,
         let (scalar, rhs) = (scalar.borrow(), rhs.borrow());
         assert_eq!(self.basis, rhs.basis);
 
-        if scalar == &F::ONE {
+        if scalar == &F::one() {
             *self += rhs;
-        } else if scalar == &-F::ONE {
+        } else if scalar == &-F::one() {
             *self -= rhs;
-        } else if scalar != &F::ZERO {
+        } else if scalar != &F::zero() {
             match self.basis {
                 Monomial => match self.degree().cmp(&rhs.degree()) {
                     Less => {
@@ -395,12 +395,12 @@ impl<F: Field, BF: Borrow<F>> Mul<BF> for &UnivariatePolynomial<F> {
 impl<F: Field, BF: Borrow<F>> MulAssign<BF> for UnivariatePolynomial<F> {
     fn mul_assign(&mut self, rhs: BF) {
         let rhs = rhs.borrow();
-        if rhs == &F::ZERO {
+        if rhs == &F::zero() {
             match self.basis {
                 Monomial => self.coeffs.clear(),
-                Lagrange => self.coeffs.fill(F::ZERO),
+                Lagrange => self.coeffs.fill(F::zero()),
             }
-        } else if rhs != &F::ONE {
+        } else if rhs != &F::one() {
             parallelize(&mut self.coeffs, |(lhs, _)| {
                 for lhs in lhs.iter_mut() {
                     *lhs *= rhs;

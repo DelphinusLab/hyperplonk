@@ -84,7 +84,7 @@ fn quotients<F: Field, T>(
         .map(|(x_i, num_vars)| {
             let timer = start_timer(|| "quotients");
             let (remaimder_lo, remainder_hi) = remainder.split_at_mut(1 << num_vars);
-            let mut quotient = vec![F::ZERO; remaimder_lo.len()];
+            let mut quotient = vec![F::zero(); remaimder_lo.len()];
 
             parallelize(&mut quotient, |(quotient, start)| {
                 izip!(quotient, &remaimder_lo[start..], &remainder_hi[start..])
@@ -167,14 +167,14 @@ mod additive {
         let timer = start_timer(|| "merged_polys");
         let eq_xt = MultilinearPolynomial::eq_xy(&t);
         let merged_polys = evals.iter().zip(eq_xt.evals().iter()).fold(
-            vec![(F::ONE, Cow::<MultilinearPolynomial<_>>::default()); points.len()],
+            vec![(F::one(), Cow::<MultilinearPolynomial<_>>::default()); points.len()],
             |mut merged_polys, (eval, eq_xt_i)| {
                 if merged_polys[eval.point()].1.is_empty() {
                     merged_polys[eval.point()] = (*eq_xt_i, Cow::Borrowed(polys[eval.poly()]));
                 } else {
                     let coeff = merged_polys[eval.point()].0;
-                    if coeff != F::ONE {
-                        merged_polys[eval.point()].0 = F::ONE;
+                    if coeff != F::one() {
+                        merged_polys[eval.point()].0 = F::one();
                         *merged_polys[eval.point()].1.to_mut() *= &coeff;
                     }
                     *merged_polys[eval.point()].1.to_mut() += (eq_xt_i, polys[eval.poly()]);

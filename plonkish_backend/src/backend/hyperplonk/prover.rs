@@ -34,7 +34,7 @@ pub(crate) fn instance_polys<'a, F: PrimeField, R: Rotatable + From<usize>>(
     instances
         .into_iter()
         .map(|instances| {
-            let mut poly = vec![F::ZERO; 1 << num_vars];
+            let mut poly = vec![F::zero(); 1 << num_vars];
             for (b, instance) in usable_indices.iter().zip(instances.into_iter()) {
                 poly[*b] = *instance;
             }
@@ -88,7 +88,7 @@ pub(super) fn lookup_compressed_poly<F: PrimeField, R: Rotatable + From<usize>>(
             .iter()
             .copied()
             .zip(expressions.iter().map(|expression| {
-                let mut compressed = vec![F::ZERO; 1 << num_vars];
+                let mut compressed = vec![F::zero(); 1 << num_vars];
                 parallelize(&mut compressed, |(compressed, start)| {
                     for (b, compressed) in (start..).zip(compressed) {
                         *compressed = expression.evaluate(
@@ -97,9 +97,9 @@ pub(super) fn lookup_compressed_poly<F: PrimeField, R: Rotatable + From<usize>>(
                                 CommonPolynomial::Identity => F::from(b as u64),
                                 CommonPolynomial::Lagrange(i) => {
                                     if lagranges.contains(&(i, b)) {
-                                        F::ONE
+                                        F::one()
                                     } else {
-                                        F::ZERO
+                                        F::zero()
                                     }
                                 }
                                 CommonPolynomial::EqXY(_) => unreachable!(),
@@ -182,8 +182,8 @@ pub(super) fn lookup_m_poly<F: PrimeField + Hash>(
         m[idx] += count;
     }
     let m = par_map_collect(m, |count| match count {
-        0 => F::ZERO,
-        1 => F::ONE,
+        0 => F::zero(),
+        1 => F::one(),
         count => F::from(count),
     });
     Ok(MultilinearPolynomial::new(m))
@@ -207,8 +207,8 @@ pub(super) fn lookup_h_poly<F: PrimeField + Hash>(
     gamma: &F,
 ) -> MultilinearPolynomial<F> {
     let [input, table] = compressed_polys;
-    let mut h_input = vec![F::ZERO; 1 << input.num_vars()];
-    let mut h_table = vec![F::ZERO; 1 << input.num_vars()];
+    let mut h_input = vec![F::zero(); 1 << input.num_vars()];
+    let mut h_table = vec![F::zero(); 1 << input.num_vars()];
 
     parallelize(&mut h_input, |(h_input, start)| {
         for (h_input, input) in h_input.iter_mut().zip(input[start..].iter()) {
@@ -242,7 +242,7 @@ pub(super) fn lookup_h_poly<F: PrimeField + Hash>(
     });
 
     if cfg!(feature = "sanity-check") {
-        assert_eq!(sum::<F>(&h_input), F::ZERO);
+        assert_eq!(sum::<F>(&h_input), F::zero());
     }
 
     MultilinearPolynomial::new(h_input)
@@ -268,7 +268,7 @@ pub(crate) fn permutation_z_polys<F: PrimeField, R: Rotatable + From<usize>>(
         .chunks(chunk_size)
         .enumerate()
         .map(|(chunk_idx, permutation_polys)| {
-            let mut product = vec![F::ONE; 1 << num_vars];
+            let mut product = vec![F::one(); 1 << num_vars];
 
             for (poly, permutation_poly) in permutation_polys.iter() {
                 parallelize(&mut product, |(product, start)| {
@@ -305,11 +305,11 @@ pub(crate) fn permutation_z_polys<F: PrimeField, R: Rotatable + From<usize>>(
     end_timer(timer);
 
     let _timer = start_timer(|| "z_polys");
-    let mut z = vec![vec![F::ZERO; 1 << num_vars]; num_chunks];
+    let mut z = vec![vec![F::zero(); 1 << num_vars]; num_chunks];
 
     let usable_indices = R::from(num_vars).usable_indices();
     let first_idx = usable_indices[0];
-    z[0][first_idx] = F::ONE;
+    z[0][first_idx] = F::one();
     for chunk_idx in 1..num_chunks {
         z[chunk_idx][first_idx] = z[chunk_idx - 1][first_idx] * products[chunk_idx - 1][first_idx];
     }
@@ -324,7 +324,7 @@ pub(crate) fn permutation_z_polys<F: PrimeField, R: Rotatable + From<usize>>(
         let last_idx = *usable_indices.last().unwrap();
         assert_eq!(
             z.last().unwrap()[last_idx] * products.last().unwrap()[last_idx],
-            F::ONE
+            F::one()
         );
     }
 
@@ -343,7 +343,7 @@ pub(super) fn prove_zero_check<F: PrimeField>(
     prove_sum_check(
         num_instance_poly,
         expression,
-        F::ZERO,
+        F::zero(),
         polys,
         challenges,
         y,

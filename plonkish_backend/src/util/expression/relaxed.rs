@@ -52,14 +52,14 @@ pub(crate) fn cross_term_expressions<F: PrimeField>(
                     &|constant| (constant, Vec::new()),
                     &|common_poly| {
                         (
-                            F::ONE,
+                            F::one(),
                             vec![ExpressionPolynomial::CommonPolynomial(common_poly)],
                         )
                     },
                     &|query| {
                         let poly = preprocess_poly_indices[&query.poly()];
                         let query = Query::new(poly, query.rotation());
-                        (F::ONE, vec![ExpressionPolynomial::Polynomial(query)])
+                        (F::one(), vec![ExpressionPolynomial::Polynomial(query)])
                     },
                     &|_| unreachable!(),
                     &|(scalar, expr)| (-scalar, expr),
@@ -159,14 +159,14 @@ pub(crate) fn products<F: PrimeField>(
                 vec![Product::new(Expression::Polynomial(query), Vec::new())]
             } else {
                 vec![Product::new(
-                    Expression::Constant(F::ONE),
+                    Expression::Constant(F::one()),
                     vec![Expression::Polynomial(query)],
                 )]
             }
         },
         &|challenge| {
             vec![Product::new(
-                Expression::Constant(F::ONE),
+                Expression::Constant(F::one()),
                 vec![Expression::Challenge(challenge)],
             )]
         },
@@ -206,8 +206,8 @@ pub(crate) fn products<F: PrimeField>(
         .map(|mut product| {
             let (scalar, preprocess) = product.preprocess.evaluate(
                 &|constant| (constant, None),
-                &|poly| (F::ONE, Some(Expression::CommonPolynomial(poly))),
-                &|query| (F::ONE, Some(Expression::Polynomial(query))),
+                &|poly| (F::one(), Some(Expression::CommonPolynomial(poly))),
+                &|query| (F::one(), Some(Expression::Polynomial(query))),
                 &|_| unreachable!(),
                 &|(scalar, preprocess)| (-scalar, preprocess),
                 &|_, _| unreachable!(),
@@ -224,7 +224,7 @@ pub(crate) fn products<F: PrimeField>(
 
             product.preprocess = preprocess
                 .map(|preprocess| {
-                    if scalar == F::ONE {
+                    if scalar == F::one() {
                         preprocess
                     } else {
                         preprocess * scalar

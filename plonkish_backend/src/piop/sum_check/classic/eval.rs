@@ -21,11 +21,11 @@ pub struct Evaluations<F>(Vec<F>);
 
 impl<F: PrimeField> Evaluations<F> {
     fn new(degree: usize) -> Self {
-        Self(vec![F::ZERO; degree + 1])
+        Self(vec![F::zero(); degree + 1])
     }
 
     fn points(degree: usize) -> Vec<F> {
-        steps(F::ZERO).take(degree + 1).collect()
+        steps(F::zero()).take(degree + 1).collect()
     }
 }
 
@@ -186,9 +186,9 @@ impl<F: PrimeField> SumCheckEvaluator<F> {
             offsets: *self.reg.offsets(),
             bs: vec![(0, 0); self.reg.rotations().len()],
             identity_step: F::from(1 << state.round),
-            lagrange_steps: vec![F::ZERO; self.reg.lagranges().len()],
-            eq_xy_steps: vec![F::ZERO; self.reg.eq_xys().len()],
-            poly_steps: vec![F::ZERO; self.reg.polys().len()],
+            lagrange_steps: vec![F::zero(); self.reg.lagranges().len()],
+            eq_xy_steps: vec![F::zero(); self.reg.eq_xys().len()],
+            poly_steps: vec![F::zero(); self.reg.polys().len()],
             cache: self.reg.cache(),
         }
     }
@@ -232,8 +232,8 @@ impl<F: PrimeField> SumCheckEvaluator<F> {
                             *step = lagrange.1;
                         }
                     } else {
-                        *eval = F::ZERO;
-                        *step = F::ZERO;
+                        *eval = F::zero();
+                        *step = F::zero();
                     }
                 });
             cache

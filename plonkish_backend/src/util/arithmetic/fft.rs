@@ -42,7 +42,7 @@ pub fn radix2_fft<Scalar: Field, G: FftGroup<Scalar>>(a: &mut [G], omega: Scalar
     }
 
     let twiddles: Vec<_> = (0..(n / 2))
-        .scan(Scalar::ONE, |w, _| {
+        .scan(Scalar::one(), |w, _| {
             let tw = *w;
             *w *= &omega;
             Some(tw)

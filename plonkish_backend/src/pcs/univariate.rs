@@ -3,7 +3,7 @@ use crate::{
     util::{
         arithmetic::{
             batch_projective_to_affine, radix2_fft, root_of_unity_inv, squares, CurveAffine, Field,
-            PrimeField,
+            FieldExt,
         },
         parallel::parallelize,
         Itertools,
@@ -161,7 +161,7 @@ mod additive {
             let r_evals = rs.iter().map(|r| r.evaluate(&z)).collect_vec();
             (comm, inner_product(&normalized_scalars, &r_evals))
         } else {
-            (Pcs::Commitment::default(), F::ZERO)
+            (Pcs::Commitment::default(), F::zero())
         };
         Pcs::open(pp, &f, &comm, &z, &eval, transcript)
     }
@@ -221,11 +221,14 @@ mod additive {
             self.diffs
                 .iter()
                 .map(|idx| points[*idx])
-                .fold(F::ONE, |eval, point| eval * (*z - point))
+                .fold(F::one(), |eval, point| eval * (*z - point))
         }
 
         fn vanishing_poly(&self, points: &[F]) -> UnivariatePolynomial<F> {
-            UnivariatePolynomial::vanishing(self.points.iter().map(|point| &points[*point]), F::ONE)
+            UnivariatePolynomial::vanishing(
+                self.points.iter().map(|point| &points[*point]),
+                F::one(),
+            )
         }
 
         fn r_eval(&self, points: &[F], z: &F, powers_of_beta: &[F]) -> F {
@@ -312,7 +315,7 @@ mod additive {
             .collect_vec();
         // Adopt fflonk's trick to normalize the set scalars by the one of first set,
         // to save 1 EC scalar multiplication for verifier.
-        let normalizer = vanishing_diff_evals[0].invert().unwrap_or(F::ONE);
+        let normalizer = vanishing_diff_evals[0].invert().unwrap_or(F::one());
         let normalized_scalars = izip_eq!(powers_of_gamma, &vanishing_diff_evals)
             .map(|(power_of_gamma, vanishing_diff_eval)| {
                 normalizer * vanishing_diff_eval * power_of_gamma
@@ -324,7 +327,7 @@ mod additive {
     fn vanishing_eval<'a, F: Field>(points: impl IntoIterator<Item = &'a F>, z: &F) -> F {
         points
             .into_iter()
-            .fold(F::ONE, |eval, point| eval * (*z - point))
+            .fold(F::one(), |eval, point| eval * (*z - point))
     }
 
     fn comm_scalars<F: Field>(
@@ -334,7 +337,7 @@ mod additive {
         normalized_scalars: &[F],
     ) -> Vec<F> {
         sets.iter().zip(normalized_scalars).fold(
-            vec![F::ZERO; num_polys],
+            vec![F::zero(); num_polys],
             |mut scalars, (set, coeff)| {
                 izip!(&set.polys, powers_of_beta)
                     .for_each(|(poly, power_of_beta)| scalars[*poly] = *coeff * power_of_beta);

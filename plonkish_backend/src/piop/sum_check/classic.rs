@@ -57,7 +57,7 @@ impl<'a, F: PrimeField> ProverState<'a, F> {
                 .expression
                 .used_langrange()
                 .into_iter()
-                .map(|i| (i, (rotatable.nth(i), F::ONE)))
+                .map(|i| (i, (rotatable.nth(i), F::one())))
                 .collect()
         };
         let eq_xys = virtual_poly
@@ -74,11 +74,11 @@ impl<'a, F: PrimeField> ProverState<'a, F> {
             degree: virtual_poly.expression.degree(),
             sum,
             lagranges,
-            identity: F::ZERO,
+            identity: F::zero(),
             eq_xys,
             polys,
             challenges: virtual_poly.challenges,
-            buf: MultilinearPolynomial::new(vec![F::ZERO; 1 << (num_vars - 1)]),
+            buf: MultilinearPolynomial::new(vec![F::zero(); 1 << (num_vars - 1)]),
             round: 0,
             rotatable,
         }
@@ -93,7 +93,7 @@ impl<'a, F: PrimeField> ProverState<'a, F> {
         self.identity += F::from(1 << self.round) * challenge;
         self.lagranges.values_mut().for_each(|(b, value)| {
             if b.is_even() {
-                *value *= &(F::ONE - challenge);
+                *value *= &(F::one() - challenge);
             } else {
                 *value *= challenge;
             }

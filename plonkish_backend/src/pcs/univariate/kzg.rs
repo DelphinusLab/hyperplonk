@@ -7,7 +7,7 @@ use crate::{
     util::{
         arithmetic::{
             batch_projective_to_affine, fixed_base_msm, powers, radix2_fft, root_of_unity_inv,
-            variable_base_msm, window_size, window_table, Curve, CurveAffine, Field,
+            variable_base_msm, window_size, window_table, Curve, CurveAffine, Field, FieldExt,
             MultiMillerLoop, PrimeCurveAffine, PrimeField,
         },
         transcript::{TranscriptRead, TranscriptWrite},
@@ -307,11 +307,11 @@ where
             assert_eq!(poly.evaluate(point), *eval);
         }
 
-        let divisor = Self::Polynomial::monomial(vec![point.neg(), M::Scalar::ONE]);
+        let divisor = Self::Polynomial::monomial(vec![point.neg(), M::Scalar::one()]);
         let (quotient, remainder) = poly.div_rem(&divisor);
 
         if cfg!(feature = "sanity-check") {
-            if eval == &M::Scalar::ZERO {
+            if eval == &M::Scalar::zero() {
                 assert!(remainder.is_empty());
             } else {
                 assert_eq!(&remainder[0], eval);

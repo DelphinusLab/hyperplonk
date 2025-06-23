@@ -9,8 +9,7 @@ use crate::{
     },
     util::{
         arithmetic::{
-            batch_projective_to_affine, inner_product, powers, squares, variable_base_msm, Curve,
-            CurveAffine, CurveExt, Field, Group, PrimeField,
+            inner_product, powers, squares, variable_base_msm, Curve, CurveAffine, Field, Group,
         },
         chain, izip,
         parallel::parallelize,
@@ -19,7 +18,7 @@ use crate::{
     },
     Error,
 };
-use halo2_curves::group::ff::BatchInvert;
+use group::ff::BatchInvert;
 use rand::RngCore;
 use std::{borrow::Cow, iter, marker::PhantomData, slice};
 
@@ -127,37 +126,38 @@ where
     type Commitment = UnivariateIpaCommitment<C>;
     type CommitmentChunk = C;
 
-    fn setup(poly_size: usize, _: usize, _: impl RngCore) -> Result<Self::Param, Error> {
+    fn setup(_poly_size: usize, _: usize, _: impl RngCore) -> Result<Self::Param, Error> {
         // TODO: Support arbitrary degree.
-        assert!(poly_size.is_power_of_two());
-        assert!(poly_size.ilog2() <= C::Scalar::S);
-
-        let k = poly_size.ilog2() as usize;
-
-        let monomial = {
-            let mut g = vec![C::Curve::identity(); poly_size];
-            parallelize(&mut g, |(g, start)| {
-                let hasher = C::CurveExt::hash_to_curve("UnivariateIpa::setup");
-                for (g, idx) in g.iter_mut().zip(start as u32..) {
-                    let mut message = [0u8; 5];
-                    message[1..5].copy_from_slice(&idx.to_le_bytes());
-                    *g = hasher(&message);
-                }
-            });
-            batch_projective_to_affine(&g)
-        };
-
-        let lagrange = monomial_g_to_lagrange_g(&monomial);
-
-        let hasher = C::CurveExt::hash_to_curve("UnivariateIpa::setup");
-        let h = hasher(&[1]).to_affine();
-
-        Ok(Self::Param {
-            k,
-            monomial,
-            lagrange,
-            h,
-        })
+        // assert!(poly_size.is_power_of_two());
+        // assert!(poly_size.ilog2() <= C::Scalar::S);
+        //
+        // let k = poly_size.ilog2() as usize;
+        //
+        // let monomial = {
+        //     let mut g = vec![C::Curve::identity(); poly_size];
+        //     parallelize(&mut g, |(g, start)| {
+        //         let hasher = C::CurveExt::hash_to_curve("UnivariateIpa::setup");
+        //         for (g, idx) in g.iter_mut().zip(start as u32..) {
+        //             let mut message = [0u8; 5];
+        //             message[1..5].copy_from_slice(&idx.to_le_bytes());
+        //             *g = hasher(&message);
+        //         }
+        //     });
+        //     batch_projective_to_affine(&g)
+        // };
+        //
+        // let lagrange = monomial_g_to_lagrange_g(&monomial);
+        //
+        // let hasher = C::CurveExt::hash_to_curve("UnivariateIpa::setup");
+        // let h = hasher(&[1]).to_affine();
+        //
+        // Ok(Self::Param {
+        //     k,
+        //     monomial,
+        //     lagrange,
+        //     h,
+        // })
+        unimplemented!()
     }
 
     fn trim(
@@ -233,9 +233,12 @@ where
         }
 
         let bases = pp.monomial();
-        let coeffs = chain![poly.coeffs().iter().cloned(), iter::repeat(C::Scalar::ZERO)]
-            .take(bases.len())
-            .collect_vec();
+        let coeffs = chain![
+            poly.coeffs().iter().cloned(),
+            iter::repeat(C::Scalar::zero())
+        ]
+        .take(bases.len())
+        .collect_vec();
         let zs = powers(*point).take(bases.len()).collect_vec();
         prove_bulletproof_reduction(bases, pp.h(), coeffs, zs, transcript)
     }
@@ -401,7 +404,7 @@ pub(crate) fn verify_bulletproof_reduction<C: CurveAffine>(
 pub(crate) fn h_coeffs<F: Field>(init: F, xi: &[F]) -> Vec<F> {
     assert!(!xi.is_empty());
 
-    let mut coeffs = vec![F::ZERO; 1 << xi.len()];
+    let mut coeffs = vec![F::zero(); 1 << xi.len()];
     coeffs[0] = init;
 
     for (len, xi) in xi.iter().rev().enumerate().map(|(i, xi)| (1 << i, xi)) {
@@ -420,7 +423,7 @@ pub(crate) fn h_coeffs<F: Field>(init: F, xi: &[F]) -> Vec<F> {
 
 fn h_eval<F: Field>(init: F, xis: &[F], x: &F) -> F {
     izip!(squares(*x), xis.iter().rev())
-        .map(|(square_of_x, xi)| F::ONE + square_of_x * xi)
+        .map(|(square_of_x, xi)| F::one() + square_of_x * xi)
         .fold(init, |acc, item| acc * item)
 }
 

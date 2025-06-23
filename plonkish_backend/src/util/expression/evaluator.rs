@@ -25,7 +25,7 @@ pub(crate) struct ExpressionRegistry<F: Field> {
 impl<F: Field> ExpressionRegistry<F> {
     pub(crate) fn new() -> Self {
         Self {
-            constants: vec![F::ZERO, F::ONE, F::ONE.double()],
+            constants: vec![F::zero(), F::one(), F::one().double()],
             rotations: vec![Rotation(0)],
             ..Default::default()
         }
@@ -85,7 +85,7 @@ impl<F: Field> ExpressionRegistry<F> {
     }
 
     pub(crate) fn cache(&self) -> Vec<F> {
-        let mut cache = vec![F::ZERO; self.offsets.calculations() + self.calculations.len()];
+        let mut cache = vec![F::zero(); self.offsets.calculations() + self.calculations.len()];
         cache[..self.constants.len()].clone_from_slice(&self.constants);
         cache
     }
@@ -215,9 +215,9 @@ impl<F: Field> ExpressionRegistry<F> {
                 }
             }
             Expression::Scaled(value, scalar) => {
-                if scalar == &F::ZERO {
+                if scalar == &F::zero() {
                     ValueSource::Constant(0)
-                } else if scalar == &F::ONE {
+                } else if scalar == &F::one() {
                     self.register_expression(value)
                 } else {
                     let value = self.register_expression(value);

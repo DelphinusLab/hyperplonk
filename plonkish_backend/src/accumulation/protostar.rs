@@ -201,22 +201,22 @@ where
         num_challenges: usize,
     ) -> Self {
         Self {
-            instances: num_instances.iter().map(|n| vec![F::ZERO; *n]).collect(),
+            instances: num_instances.iter().map(|n| vec![F::zero(); *n]).collect(),
             witness_comms: iter::repeat_with(C::default)
                 .take(num_witness_polys)
                 .collect(),
-            challenges: vec![F::ZERO; num_challenges],
-            u: F::ZERO,
+            challenges: vec![F::zero(); num_challenges],
+            u: F::zero(),
             e_comm: C::default(),
             compressed_e_sum: match strategy {
                 NoCompressing => None,
-                Compressing => Some(F::ZERO),
+                Compressing => Some(F::zero()),
             },
         }
     }
 
     fn claimed_sum(&self) -> F {
-        self.compressed_e_sum.unwrap_or(F::ZERO)
+        self.compressed_e_sum.unwrap_or(F::zero())
     }
 
     fn absorb_into<CommitmentChunk>(
@@ -246,11 +246,11 @@ where
             instances: nark.instances,
             witness_comms: nark.witness_comms,
             challenges: nark.challenges,
-            u: F::ONE,
+            u: F::one(),
             e_comm: C::default(),
             compressed_e_sum: match strategy {
                 NoCompressing => None,
-                Compressing => Some(F::ZERO),
+                Compressing => Some(F::zero()),
             },
         }
     }
@@ -259,7 +259,7 @@ where
     where
         C: Additive<F>,
     {
-        let one = F::ONE;
+        let one = F::one();
         let powers_of_r = powers(*r).take(cross_term_comms.len() + 2).collect_vec();
         izip_eq!(&mut self.instances, &rhs.instances)
             .for_each(|(lhs, rhs)| izip_eq!(lhs, rhs).for_each(|(lhs, rhs)| *lhs += &(*rhs * r)));
@@ -282,7 +282,7 @@ where
     ) where
         C: Additive<F>,
     {
-        let one = F::ONE;
+        let one = F::one();
         let powers_of_r = powers(*r)
             .take(compressed_cross_term_sums.len().max(1) + 2)
             .collect_vec();

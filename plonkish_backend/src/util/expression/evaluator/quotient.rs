@@ -1,7 +1,5 @@
 use crate::util::{
-    arithmetic::{
-        radix2_fft, root_of_unity, root_of_unity_inv, BatchInvert, WithSmallOrderMulGroup,
-    },
+    arithmetic::{radix2_fft, root_of_unity, root_of_unity_inv, BatchInvert, FieldExt},
     chain,
     expression::{
         evaluator::ExpressionRegistry,
@@ -40,7 +38,7 @@ pub struct Radix2Domain<F> {
     extended_n_inv_zeta_inv: F,
 }
 
-impl<F: WithSmallOrderMulGroup<3>> Radix2Domain<F> {
+impl<F: FieldExt> Radix2Domain<F> {
     pub fn new(k: usize, degree: usize) -> Self {
         let quotient_degree = degree.checked_sub(1).unwrap_or_default();
         let extended_k = k + quotient_degree.next_power_of_two().ilog2() as usize;
@@ -54,12 +52,12 @@ impl<F: WithSmallOrderMulGroup<3>> Radix2Domain<F> {
 
         let zeta = F::ZETA;
         let zeta_inv = F::ZETA.square();
-        assert_eq!(zeta * zeta_inv, F::ONE);
+        assert_eq!(zeta * zeta_inv, F::one());
 
-        let n_inv = F::TWO_INV.pow([k as u64]);
+        let n_inv = F::TWO_INV.pow(&[k as u64, 0, 0, 0]);
         let n_inv_zeta = n_inv * zeta;
         let n_inv_zeta_inv = n_inv * zeta_inv;
-        let extended_n_inv = F::TWO_INV.pow([extended_k as u64]);
+        let extended_n_inv = F::TWO_INV.pow(&[extended_k as u64, 0, 0, 0]);
         let extended_n_inv_zeta = extended_n_inv * zeta;
         let extended_n_inv_zeta_inv = extended_n_inv * zeta_inv;
 
@@ -129,7 +127,7 @@ impl<F: WithSmallOrderMulGroup<3>> Radix2Domain<F> {
             Ordering::Equal => return x,
         };
         let exponent = rotation.unsigned_abs() as usize;
-        let mut scalar = F::ONE;
+        let mut scalar = F::one();
         for nth in (1..=(usize::BITS - exponent.leading_zeros()) as usize).rev() {
             if exponent.nth_bit(nth) {
                 scalar *= omega;
@@ -150,10 +148,10 @@ impl<F: WithSmallOrderMulGroup<3>> Radix2Domain<F> {
         x: F,
     ) -> F {
         let lagrange = {
-            let common = (x.pow_vartime([self.n as u64]) - F::ONE) * self.n_inv;
+            let common = (x.pow_vartime([self.n as u64]) - F::one()) * self.n_inv;
             let used_lagrange = expression.used_langrange();
             let mut denoms = chain![&used_lagrange]
-                .map(|i| x - self.rotate_point(F::ONE, Rotation(*i)))
+                .map(|i| x - self.rotate_point(F::one(), Rotation(*i)))
                 .collect_vec();
             denoms.batch_invert();
             izip!(used_lagrange, denoms)
@@ -202,7 +200,7 @@ impl<F: WithSmallOrderMulGroup<3>> Radix2Domain<F> {
                 .for_each(|(buf, scalar)| *buf *= scalar);
         });
 
-        buf.resize(self.extended_n, F::ZERO);
+        buf.resize(self.extended_n, F::zero());
         radix2_fft(&mut buf, self.extended_omega, self.extended_k);
 
         buf
@@ -221,7 +219,7 @@ impl<F: WithSmallOrderMulGroup<3>> Radix2Domain<F> {
             );
         });
 
-        buf.resize(self.extended_n, F::ZERO);
+        buf.resize(self.extended_n, F::zero());
         radix2_fft(&mut buf, self.extended_omega, self.extended_k);
 
         buf
@@ -248,7 +246,7 @@ impl<F: WithSmallOrderMulGroup<3>> Radix2Domain<F> {
 }
 
 #[derive(Clone, Debug)]
-pub struct QuotientEvaluator<'a, F: WithSmallOrderMulGroup<3>> {
+pub struct QuotientEvaluator<'a, F: FieldExt> {
     magnification: i32,
     extended_n: i32,
     reg: ExpressionRegistry<F>,
@@ -259,7 +257,7 @@ pub struct QuotientEvaluator<'a, F: WithSmallOrderMulGroup<3>> {
     vanishing_invs: Vec<F>,
 }
 
-impl<'a, F: WithSmallOrderMulGroup<3>> QuotientEvaluator<'a, F> {
+impl<'a, F: FieldExt> QuotientEvaluator<'a, F> {
     pub fn new(
         domain: &'a Radix2Domain<F>,
         expression: &Expression<F>,
@@ -285,7 +283,7 @@ impl<'a, F: WithSmallOrderMulGroup<3>> QuotientEvaluator<'a, F> {
         let lagranges = reg.lagranges().iter().map(|i| lagranges[i]).collect_vec();
         let polys = polys.into_iter().collect_vec();
         let vanishing_invs = {
-            let step = domain.extended_omega.pow([domain.n() as u64]);
+            let step = domain.extended_omega.pow(&[domain.n() as u64, 0, 0, 0]);
             let mut vanishing_invs = iter::successors(
                 Some(match domain.n() % 3 {
                     1 => domain.zeta,
@@ -294,7 +292,7 @@ impl<'a, F: WithSmallOrderMulGroup<3>> QuotientEvaluator<'a, F> {
                 }),
                 |value| Some(step * value),
             )
-            .map(|value| value - F::ONE)
+            .map(|value| value - F::one())
             .take(domain.magnification)
             .collect_vec();
             vanishing_invs.batch_invert();
@@ -371,7 +369,7 @@ mod test {
                 domain.lagrange_to_monomial((&lagrange[..domain.n()]).into()),
                 monomial[..domain.n()]
             );
-            assert!(!monomial[domain.n()..].iter().any(|v| *v != Fr::ZERO));
+            assert!(!monomial[domain.n()..].iter().any(|v| *v != Fr::zero()));
         }
     }
 }

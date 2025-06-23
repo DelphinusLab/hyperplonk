@@ -4,7 +4,7 @@ use crate::{
         arithmetic::{div_ceil, field_size, CurveAffine, Field, Group, PrimeField},
         chain, izip_eq,
         parallel::{num_threads, parallelize, parallelize_iter},
-        start_timer, Itertools,
+        Itertools,
     },
 };
 use std::{
@@ -97,7 +97,7 @@ pub fn variable_base_msm<'a, 'b, C: CurveAffine>(
     let bases = bases.into_iter().collect_vec();
     assert_eq!(scalars.len(), bases.len());
 
-    let _timer = start_timer(|| format!("variable_base_msm-{}", scalars.len()));
+    // let _timer = start_timer(|| format!("variable_base_msm-{}", scalars.len()));
 
     let num_threads = num_threads();
     if scalars.len() <= num_threads {
@@ -200,11 +200,11 @@ impl<'a, F: Field, T: Additive<F>> Msm<'a, F, T> {
     }
 
     pub fn base(base: &'a T) -> Self {
-        Self::term(F::ONE, base)
+        Self::term(F::one(), base)
     }
 
     pub fn term(scalar: F, base: &'a T) -> Self {
-        Self::Terms(F::ZERO, vec![(scalar, base)])
+        Self::Terms(F::zero(), vec![(scalar, base)])
     }
 
     pub fn evaluate(self) -> (F, T) {
@@ -220,7 +220,7 @@ impl<'a, F: Field, T: Additive<F>> Msm<'a, F, T> {
 
 impl<'a, F: Field, T: Additive<F>> Default for Msm<'a, F, T> {
     fn default() -> Self {
-        Msm::Terms(F::ZERO, Vec::new())
+        Msm::Terms(F::zero(), Vec::new())
     }
 }
 

@@ -9,8 +9,6 @@ pub mod poly;
 pub mod transform;
 pub mod util;
 
-pub use halo2_curves;
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum Error {
     InvalidSumcheck(String),

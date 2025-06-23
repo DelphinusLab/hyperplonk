@@ -150,7 +150,7 @@ where
         let lookup_compressed_polys = {
             let instance_polys = instance_polys::<_, BinaryField>(pp.num_vars, instances);
             let polys = chain![&instance_polys, &pp.preprocess_polys, &witness_polys].collect_vec();
-            let thetas = chain![[F::ONE], theta_primes.iter().cloned()].collect_vec();
+            let thetas = chain![[F::one()], theta_primes.iter().cloned()].collect_vec();
             lookup_compressed_polys::<_, BinaryField>(&pp.lookups, &polys, &challenges, &thetas)
         };
         end_timer(timer);

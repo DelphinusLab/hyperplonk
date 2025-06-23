@@ -30,7 +30,7 @@ pub(super) fn verify_zero_check<F: PrimeField>(
     verify_sum_check(
         num_vars,
         expression,
-        F::ZERO,
+        F::zero(),
         instances,
         challenges,
         y,
