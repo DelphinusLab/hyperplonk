@@ -22,7 +22,7 @@ use std::{
 };
 
 mod coeff;
-mod eval;
+pub mod eval;
 
 pub use coeff::CoefficientsProver;
 pub use eval::EvaluationsProver;

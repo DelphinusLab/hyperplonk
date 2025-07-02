@@ -4,7 +4,7 @@ use crate::{
         arithmetic::{div_ceil, field_size, CurveAffine, Field, Group, PrimeField},
         chain, izip_eq,
         parallel::{num_threads, parallelize, parallelize_iter},
-        Itertools,
+        start_timer, Itertools,
     },
 };
 use std::{
@@ -126,7 +126,7 @@ fn variable_base_msm_serial<C: CurveAffine>(
     scalars: &[&C::Scalar],
     bases: &[&C],
     result: &mut C::Curve,
-) {
+) -> C::Curve {
     #[derive(Clone, Copy)]
     enum CurveAcc<C: CurveAffine> {
         Empty,
@@ -157,6 +157,14 @@ fn variable_base_msm_serial<C: CurveAffine>(
             }
         }
     }
+    if scalars.is_empty() {
+        assert!(
+            bases.is_empty(),
+            "variable_base_msm_serial: bases must be empty if scalars is empty"
+        );
+        let mut result = C::Curve::identity();
+        return result;
+    }
 
     let scalars = scalars.iter().map(|scalar| scalar.to_repr()).collect_vec();
     let num_bytes = scalars[0].as_ref().len();
@@ -186,6 +194,7 @@ fn variable_base_msm_serial<C: CurveAffine>(
             *result += &running_sum;
         }
     }
+    *result
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

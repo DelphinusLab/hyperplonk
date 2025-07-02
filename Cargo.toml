@@ -7,3 +7,6 @@ resolver = "2"
 inherits = "release"
 debug = true
 codegen-units = 1
+
+[patch."https://github.com/DelphinusLab/halo2-gpu-specific.git"]
+halo2_proofs ={path="/Users/pony/github/delphinuslab/temp/halo2-gpu-specific/halo2_proofs"}

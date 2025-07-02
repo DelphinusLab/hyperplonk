@@ -382,33 +382,33 @@ impl<F: Field, BF: Borrow<F>, P: Borrow<UnivariatePolynomial<F>>> SubAssign<(BF,
     }
 }
 
-impl<F: Field, BF: Borrow<F>> Mul<BF> for &UnivariatePolynomial<F> {
-    type Output = UnivariatePolynomial<F>;
+// impl<F: Field, BF: Borrow<F>> Mul<BF> for &UnivariatePolynomial<F> {
+//     type Output = UnivariatePolynomial<F>;
 
-    fn mul(self, rhs: BF) -> UnivariatePolynomial<F> {
-        let mut output = self.clone();
-        output *= rhs;
-        output
-    }
-}
+//     fn mul(self, rhs: BF) -> UnivariatePolynomial<F> {
+//         let mut output = self.clone();
+//         output *= rhs;
+//         output
+//     }
+// }
 
-impl<F: Field, BF: Borrow<F>> MulAssign<BF> for UnivariatePolynomial<F> {
-    fn mul_assign(&mut self, rhs: BF) {
-        let rhs = rhs.borrow();
-        if rhs == &F::zero() {
-            match self.basis {
-                Monomial => self.coeffs.clear(),
-                Lagrange => self.coeffs.fill(F::zero()),
-            }
-        } else if rhs != &F::one() {
-            parallelize(&mut self.coeffs, |(lhs, _)| {
-                for lhs in lhs.iter_mut() {
-                    *lhs *= rhs;
-                }
-            });
-        }
-    }
-}
+// impl<F: Field, BF: Borrow<F>> MulAssign<BF> for UnivariatePolynomial<F> {
+//     fn mul_assign(&mut self, rhs: BF) {
+//         let rhs = rhs.borrow();
+//         if rhs == &F::zero() {
+//             match self.basis {
+//                 Monomial => self.coeffs.clear(),
+//                 Lagrange => self.coeffs.fill(F::zero()),
+//             }
+//         } else if rhs != &F::one() {
+//             parallelize(&mut self.coeffs, |(lhs, _)| {
+//                 for lhs in lhs.iter_mut() {
+//                     *lhs *= rhs;
+//                 }
+//             });
+//         }
+//     }
+// }
 
 impl<F: Field, P: Borrow<UnivariatePolynomial<F>>> Sum<P> for UnivariatePolynomial<F> {
     fn sum<I: Iterator<Item = P>>(mut iter: I) -> UnivariatePolynomial<F> {
@@ -431,7 +431,7 @@ impl<F: Field, BF: Borrow<F>, P: Borrow<UnivariatePolynomial<F>>> Sum<(BF, P)>
         let init = match iter.next() {
             Some((scalar, poly)) => {
                 let mut poly = poly.borrow().clone();
-                poly *= scalar.borrow();
+                poly *= *scalar.borrow();
                 poly
             }
             _ => return Self::zero(),
@@ -440,6 +440,86 @@ impl<F: Field, BF: Borrow<F>, P: Borrow<UnivariatePolynomial<F>>> Sum<(BF, P)>
             acc += (scalar.borrow(), poly.borrow());
             acc
         })
+    }
+}
+
+// &Poly * Scalar -> Poly
+impl<F: Field> Mul<F> for &UnivariatePolynomial<F> {
+    type Output = UnivariatePolynomial<F>;
+
+    fn mul(self, rhs: F) -> Self::Output {
+        if rhs == F::zero() {
+            // return zero poly based Monomial
+            return UnivariatePolynomial::monomial(Vec::new());
+        }
+        let mut output = self.clone();
+        // use the MulAssign<F> defined below
+        output *= rhs;
+        output
+    }
+}
+
+// Poly *= Scalar
+impl<F: Field> MulAssign<F> for UnivariatePolynomial<F> {
+    fn mul_assign(&mut self, rhs: F) {
+        if rhs == F::zero() {
+            match self.basis {
+                Monomial => self.coeffs.clear(),
+                Lagrange => self.coeffs.fill(F::zero()),
+            }
+            // make sure zero poly is processed correctly at Monomial base
+            if self.basis == Monomial {
+                self.truncate_leading_zeros();
+            }
+        } else if rhs != F::one() {
+            let rhs_owned = rhs; // catch rhs for closure
+            parallelize(&mut self.coeffs, |(lhs, _)| {
+                for lhs_coeff in lhs.iter_mut() {
+                    *lhs_coeff *= rhs_owned;
+                }
+            });
+        }
+        // not need truncate_leading_zeros，due to new leading zero will not be produced multi by non-zero scalar
+    }
+}
+
+impl<F: Field> Mul<&UnivariatePolynomial<F>> for &UnivariatePolynomial<F> {
+    type Output = UnivariatePolynomial<F>;
+
+    fn mul(self, rhs: &UnivariatePolynomial<F>) -> Self::Output {
+        assert_eq!(
+            self.basis, Monomial,
+            "Polynomial multiplication only supported for Monomial basis"
+        );
+        assert_eq!(
+            rhs.basis, Monomial,
+            "Polynomial multiplication only supported for Monomial basis"
+        );
+
+        if self.is_empty() || rhs.is_empty() {
+            return UnivariatePolynomial::monomial(Vec::new());
+        }
+
+        let mut result_coeffs = vec![F::zero(); self.coeffs.len() + rhs.coeffs.len() - 1];
+
+        for i in 0..self.coeffs.len() {
+            if self.coeffs[i].is_zero_vartime() {
+                continue;
+            }
+            for j in 0..rhs.coeffs.len() {
+                // optimal-able: if !rhs.coeffs[j].is_zero_vartime() { }
+                result_coeffs[i + j] += self.coeffs[i] * rhs.coeffs[j];
+            }
+        }
+        UnivariatePolynomial::monomial(result_coeffs)
+    }
+}
+
+impl<F: Field> Mul<F> for UnivariatePolynomial<F> {
+    type Output = UnivariatePolynomial<F>;
+    fn mul(self, rhs: F) -> Self::Output {
+        // delegate to  &Poly * Scalar
+        &self * rhs
     }
 }
 

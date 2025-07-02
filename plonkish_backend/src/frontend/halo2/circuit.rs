@@ -6,7 +6,7 @@ mod vanilla_plonk {
         util::{arithmetic::Field, chain, Itertools},
     };
     use halo2_proofs::{
-        circuit::{Layouter, SimpleFloorPlanner, Value},
+        circuit::{floor_planner::V1, Layouter},
         plonk::{Advice, Assigned, Circuit, Column, ConstraintSystem, Error, Fixed},
         poly::Rotation,
     };
@@ -55,7 +55,7 @@ mod vanilla_plonk {
 
     impl<F: Field> Circuit<F> for VanillaPlonk<F> {
         type Config = VanillaPlonkConfig;
-        type FloorPlanner = SimpleFloorPlanner;
+        type FloorPlanner = V1;
 
         fn without_witnesses(&self) -> Self {
             unimplemented!()
