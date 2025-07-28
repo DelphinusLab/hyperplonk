@@ -18,7 +18,7 @@ use crate::{
         chain, izip,
         parallel::parallelize,
         transcript::{TranscriptRead, TranscriptWrite},
-        Deserialize, DeserializeOwned, Itertools, Serialize,
+        Deserialize, DeserializeOwned, Itertools, Serialize,start_timer,end_timer
     },
     Error,
 };
@@ -186,11 +186,6 @@ where
         izip!(&quotients, &q_scalars).for_each(|(q, scalar)| f += (scalar, q));
 
         // UnivariateKzg::commit_and_write(&pp.open_pp, &f, transcript)?;
-
-        //println!("f: {:?}", f.coeffs());
-        //println!("f[0]: {:?}", f[0]);
-        //println!("f.evaluate(): {:?}", f.evaluate(&x));
-        //println!("=======================================================");
 
         let comm = if cfg!(feature = "sanity-check") {
             assert_eq!(f.evaluate(&x), M::Scalar::zero());
