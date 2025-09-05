@@ -34,7 +34,7 @@ use crate::util::expression::rotate::Lexical;
 
 pub(crate) mod preprocessor;
 pub(crate) mod prover;
-pub(crate) mod verifier;
+pub mod verifier;
 
 #[cfg(any(test, feature = "benchmark"))]
 pub mod util;
@@ -68,16 +68,16 @@ where
     F: PrimeField,
     Pcs: PolynomialCommitmentScheme<F>,
 {
-    pub(crate) pcs: Pcs::VerifierParam,
-    pub(crate) num_instances: Vec<usize>,
-    pub(crate) num_witness_polys: Vec<usize>,
-    pub(crate) num_challenges: Vec<usize>,
-    pub(crate) num_lookups: usize,
-    pub(crate) num_permutation_z_polys: usize,
-    pub(crate) num_vars: usize,
-    pub(crate) expression: Expression<F>,
-    pub(crate) preprocess_comms: Vec<Pcs::Commitment>,
-    pub(crate) permutation_comms: Vec<(usize, Pcs::Commitment)>,
+    pub pcs: Pcs::VerifierParam,
+    pub num_instances: Vec<usize>,
+    pub num_witness_polys: Vec<usize>,
+    pub num_challenges: Vec<usize>,
+    pub num_lookups: usize,
+    pub num_permutation_z_polys: usize,
+    pub num_vars: usize,
+    pub expression: Expression<F>,
+    pub preprocess_comms: Vec<Pcs::Commitment>,
+    pub permutation_comms: Vec<(usize, Pcs::Commitment)>,
 }
 
 impl<F, Pcs> PlonkishBackend<F> for HyperPlonk<Pcs>

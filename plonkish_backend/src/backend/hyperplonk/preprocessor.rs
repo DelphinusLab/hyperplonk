@@ -263,6 +263,7 @@ pub(crate) fn permutation_polys<F: PrimeField>(
         }
         poly_index
     };
+    //here is idx instead of omega of halo2
     let mut permutations = (0..permutation_polys.len() as u64)
         .map(|idx| {
             steps(F::from(idx << num_vars))
@@ -270,6 +271,7 @@ pub(crate) fn permutation_polys<F: PrimeField>(
                 .collect_vec()
         })
         .collect_vec();
+    //actually cycle has set unify global index by hyper-plonk, here just adapt to column
     for cycle in cycles.iter() {
         let (i0, j0) = cycle[0];
         let mut last = permutations[poly_index[i0]][j0];

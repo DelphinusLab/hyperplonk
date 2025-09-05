@@ -2,6 +2,7 @@ use crate::{
     poly::Polynomial,
     util::{
         arithmetic::Field,
+        arithmetic::CurveAffine,
         expression::Rotation,
         transcript::{TranscriptRead, TranscriptWrite},
         DeserializeOwned, Serialize,
@@ -31,7 +32,7 @@ pub trait PolynomialCommitmentScheme<F: Field>: Clone + Debug {
         + AsRef<[Self::CommitmentChunk]>
         + Serialize
         + DeserializeOwned;
-    type CommitmentChunk: Clone + Debug + Default;
+    type CommitmentChunk: Clone + Debug + Default+CurveAffine+Sized;
 
     fn setup(poly_size: usize, batch_size: usize, rng: impl RngCore) -> Result<Self::Param, Error>;
 

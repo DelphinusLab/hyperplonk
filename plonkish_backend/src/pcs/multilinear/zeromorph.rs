@@ -463,17 +463,18 @@ where
         let z = transcript.squeeze_challenge();
 
         let (eval_scalar, q_scalars) = eval_and_quotient_scalars(y, x, z, point);
+        let pi = transcript.read_commitment()?;
 
-        let scalars = chain![[M::Scalar::one(), z, eval_scalar * eval], q_scalars].collect_vec();
-        let bases = chain![[q_hat_comm, comm.0, vp.g1()], q_comms].collect_vec();
+        let scalars = chain![[M::Scalar::one(), z, eval_scalar * eval,x], q_scalars].collect_vec();
+        let bases = chain![[q_hat_comm, comm.0, vp.g1(),pi], q_comms].collect_vec();
         let c: M::G1Affine = variable_base_msm(&scalars, &bases).into();
 
         // let c= transcript.read_commitment()?;
-        let pi = transcript.read_commitment()?;
 
         M::pairings_product_is_identity(&[
-            (&c, &(-vp.s_offset_g2).into()),
-            (&pi, &(vp.s_g2() - (vp.g2() * x).into()).to_affine().into()),
+            (&pi, &(vp.s_g2()).into()),
+            (&c, &(-vp.g2()).into()),
+            // (&pi, &(vp.s_g2() - (vp.g2() * x).into()).to_affine().into()),
         ])
         .then_some(())
         .ok_or_else(|| Error::InvalidPcsOpen("Invalid Zeromorph KZG open".to_string()))

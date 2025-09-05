@@ -13,7 +13,9 @@ pub mod relaxed;
 pub mod rotate;
 
 pub use rotate::Rotation;
+pub use rotate::Rotatable;
 
+//TODO how to refactor to halo2's Query(Advice,Fix..), thus, poly will be relative index,not global idx
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Query {
     poly: usize,

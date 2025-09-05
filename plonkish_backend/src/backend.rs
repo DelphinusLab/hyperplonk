@@ -80,6 +80,8 @@ pub struct PlonkishCircuitInfo<F> {
     /// Witness polynomial index starts with offset `num_instances.len()` +
     /// `preprocess_polys.len()`.
     pub num_witness_polys: Vec<usize>,
+    /// named advices column
+    pub named_witnesses: Vec<(String,u32)>,
     /// Number of challenge in each phase.
     pub num_challenges: Vec<usize>,
     /// Constraints.

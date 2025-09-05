@@ -79,26 +79,18 @@ impl<'a, E: MultiMillerLoop, C: ZkCircuit<E::Scalar>> PlonkishCircuit<E::Scalar>
         let num_instances = instances.iter().map(Vec::len).collect_vec();
         let preprocess_polys =
             vec![vec![E::Scalar::zero(); 1 << k]; cs.num_selectors + cs.num_fixed_columns];
-        let column_idx = column_idx(cs);
-        let permutations = cs
-            .permutation
-            .get_columns()
-            .iter()
-            .map(|column| {
-                let key = (*column.column_type(), column.index());
-                vec![(column_idx[&key], 1)]
-            })
-            .collect_vec();
         Ok(PlonkishCircuitInfo {
             k: *k as usize,
             num_instances,
             preprocess_polys,
+            //TODO: remove vector witnesses, keep one
             num_witness_polys: num_advice_poly(cs.num_advice_columns),
+            named_witnesses: cs.named_advices.clone(),
             //for one phase halo2, challenge is not needed
             num_challenges: vec![0],
             constraints,
             lookups,
-            permutations,
+            permutations:vec![],
             max_degree: Some(cs.degree()),
         })
     }
@@ -178,9 +170,13 @@ impl<'a, E: MultiMillerLoop, C: ZkCircuit<E::Scalar>> PlonkishCircuit<E::Scalar>
     }
 }
 
+fn get_advice_offset<F: Field>(cs: &ConstraintSystem<F>)->usize{
+    cs.num_instance_columns + cs.num_fixed_columns + cs.num_selectors
+}
+
 //todo
 fn advice_idx<F: Field>(cs: &ConstraintSystem<F>) -> Vec<usize> {
-    let advice_offset = cs.num_instance_columns + cs.num_fixed_columns + cs.num_selectors;
+    let advice_offset = get_advice_offset(cs);
     (0..cs.num_advice_columns)
         .map(|idx| idx + advice_offset)
         .collect()

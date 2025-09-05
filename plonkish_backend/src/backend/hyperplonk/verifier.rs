@@ -196,7 +196,7 @@ pub(crate) fn instance_evals<F: PrimeField, R: Rotatable + From<usize>>(
         .collect()
 }
 
-pub(crate) fn pcs_query<F: PrimeField>(
+pub fn pcs_query<F: PrimeField>(
     expression: &Expression<F>,
     num_instance_poly: usize,
 ) -> BTreeSet<Query> {

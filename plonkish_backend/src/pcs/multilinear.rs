@@ -4,16 +4,12 @@ use crate::{
     Error,
 };
 
-mod brakedown;
 mod gemini;
 mod hyrax;
 mod ipa;
 mod kzg;
 mod zeromorph;
 
-pub use brakedown::{
-    MultilinearBrakedown, MultilinearBrakedownCommitment, MultilinearBrakedownParam,
-};
 pub use gemini::Gemini;
 pub use hyrax::{MultilinearHyrax, MultilinearHyraxCommitment, MultilinearHyraxParam};
 pub use ipa::{MultilinearIpa, MultilinearIpaCommitment, MultilinearIpaParam};
@@ -885,6 +881,7 @@ mod additive {
                 .zip(eq_xt.evals())
                 .map(|(eval, eq_xt_i)| *eq_xt_i) // Dereference eq_xt_i
                 .collect_vec();
+            //rotate_polys_comm has already multiplied ex_xts
             scalars.push(F::one());
             let bases = evals_cur.iter().map(|eval|comms[eval.poly()]).chain(std::iter::once(&rotate_polys_comm));
             Pcs::Commitment::msm(&scalars, bases)
