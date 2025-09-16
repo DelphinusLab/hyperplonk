@@ -86,33 +86,6 @@ pub trait PolynomialCommitmentScheme<F: Field>: Clone + Debug {
         transcript: &mut impl TranscriptWrite<Self::CommitmentChunk, F>,
     ) -> Result<(), Error>;
 
-    fn prove_shifted_evaluation(
-        pp: &Self::ProverParam,                       // ZeromorphKzgProverParam<M>
-        poly: &Self::Polynomial, // MultilinearPolynomial<M::Scalar> (merged and scaled)
-        comm: &Self::Commitment, // Commitment<M::Scalar, UnivariateKzg<M>> (to the original merged poly)
-        point: &Point<F, Self::Polynomial>, // Vec<M::Scalar> (the point 'u')
-        value: &F,               // Claimed value v = f_shifted(u)
-        rotation: &crate::util::expression::Rotation, // Use the provided Rotation struct
-        transcript: &mut impl TranscriptWrite<Self::CommitmentChunk, F>,
-    ) -> Result<(), Error> {
-        Err(Error::NotImplemented(
-            "prove_shifted_evaluation not implemented".to_string(),
-        ))
-    }
-
-    fn verify_shifted_evaluation(
-        _vp: &Self::VerifierParam,           // ZeromorphKzgVerifierParam<M>
-        _comm: &Self::Commitment,            // 对原始合并多项式 f 的承诺 C_f
-        _point: &Point<F, Self::Polynomial>, // Vec<M::Scalar> (the point 'u')
-        _value: &F,                          // Claimed value v = f_shifted(u)
-        _rotation: &crate::util::expression::Rotation, //
-        _transcript: &mut impl TranscriptRead<Self::CommitmentChunk, F>,
-    ) -> Result<(), Error> {
-        Err(Error::NotImplemented(
-            "verify_shifted_evaluation not implemented".to_string(),
-        ))
-    }
-
     fn batch_open<'a>(
         pp: &Self::ProverParam,
         polys: impl IntoIterator<Item = &'a Self::Polynomial>,
@@ -130,13 +103,14 @@ pub trait PolynomialCommitmentScheme<F: Field>: Clone + Debug {
         polys: impl IntoIterator<Item = &'a Self::Polynomial>,
         comms: impl IntoIterator<Item = &'a Self::Commitment>,
         points: &[Point<F, Self::Polynomial>],
-        evals: &[evaluation_for_shift<F>],
+        evals: &[EvaluationForShift<F>],
         transcript: &mut impl TranscriptWrite<Self::CommitmentChunk, F>,
     ) -> Result<(), Error>
     where
         Self::Polynomial: 'a,
         Self::Commitment: 'a,
     {
+        let _ = (pp, polys, comms, points, evals, transcript);
         Err(Error::NotImplemented(
             "batch_open_for_shift not implemented".to_string(),
         ))
@@ -179,12 +153,13 @@ pub trait PolynomialCommitmentScheme<F: Field>: Clone + Debug {
         vp: &Self::VerifierParam,
         comms: impl IntoIterator<Item = &'a Self::Commitment>,
         points: &[Point<F, Self::Polynomial>],
-        evals: &[evaluation_for_shift<F>],
+        evals: &[EvaluationForShift<F>],
         transcript: &mut impl TranscriptRead<Self::CommitmentChunk, F>,
     ) -> Result<(), Error>
     where
         Self::Commitment: 'a,
     {
+        let _ = (vp, comms, points, evals, transcript);
         Err(Error::NotImplemented(
             "batch_verify_for_shift not implemented".to_string(),
         ))
@@ -227,13 +202,13 @@ pub trait Additive<F: Field>: Clone + Debug + Default + PartialEq + Eq {
 }
 
 #[derive(Clone, Debug)]
-pub struct evaluation_for_shift<F> {
+pub struct EvaluationForShift<F> {
     poly: usize,
     rotation: Rotation,
     value: F,
 }
 
-impl<F> evaluation_for_shift<F> {
+impl<F> EvaluationForShift<F> {
     pub fn new(poly: usize, rotation: Rotation, value: F) -> Self {
         Self {
             poly,

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::util::{
     arithmetic::PrimeField,
     expression::{evaluator::ExpressionRegistry, rotate::Rotatable, Expression},

@@ -17,10 +17,7 @@ use crate::{
     util::{
         arithmetic::{powers, Curve, CurveAffine, PrimeField},
         chain, end_timer,
-        expression::{
-            rotate::{ Rotatable},
-            Expression,
-        },
+        expression::{rotate::Rotatable, Expression},
         start_timer,
         transcript::{TranscriptRead, TranscriptWrite},
         Deserialize, DeserializeOwned, Itertools, Serialize,
@@ -31,10 +28,9 @@ use halo2_proofs::arithmetic::MultiMillerLoop;
 use halo2_proofs::helpers::Serializable;
 use halo2_proofs::helpers::{read_u32, CurveRead};
 use halo2_proofs::plonk::Circuit;
-use halo2_proofs::plonk::VerifyingKey;
 use halo2_proofs::poly::commitment as halo2_commitment;
 use halo2_proofs::poly::Polynomial;
-use prover::prove_zero_check_with_shift;
+
 use rand::RngCore;
 use std::{
     fmt::Debug,
@@ -43,7 +39,6 @@ use std::{
     iter,
     marker::PhantomData,
 };
-use verifier::verify_zero_check_with_shift;
 
 pub(crate) mod preprocessor;
 pub(crate) mod prover;
@@ -202,220 +197,6 @@ where
         ps: &Self::ProverSetupParam,
         pp: &Self::ProverParam,
         circuit: &impl PlonkishCircuit<C::ScalarExt>,
-        transcript: &mut impl TranscriptWrite<Pcs::CommitmentChunk, C::ScalarExt>,
-        _: impl RngCore,
-    ) -> Result<(), Error> {
-        assert_eq!(circuit.instances().len(), pp.num_instances);
-        let instance_polys = {
-            let instances = circuit.instances();
-
-            for instances in circuit.instances().iter() {
-                for instance in instances.iter() {
-                    transcript.common_field_element(instance)?;
-                }
-            }
-            instance_polys::<_, Lexical>(pp.num_vars, instances)
-        };
-
-        // Round 0..n
-
-        let mut witness_polys = Vec::with_capacity(pp.num_witness_polys);
-        let mut witness_comms = Vec::with_capacity(pp.num_witness_polys);
-        let mut challenges = Vec::with_capacity(4);
-        let timer = start_timer(|| "witness_collector");
-        let polys = circuit
-            .synthesize()?
-            .into_iter()
-            .map(MultilinearPolynomial::new)
-            .collect_vec();
-        end_timer(timer);
-
-        witness_comms.extend(Pcs::batch_commit_and_write(&ps.pcs, &polys, transcript)?);
-        witness_polys.extend(polys);
-        let polys = chain![&instance_polys, &pp.preprocess_polys, &witness_polys].collect_vec();
-
-        // Round n
-
-        let beta = transcript.squeeze_challenge();
-
-        let timer = start_timer(|| format!("lookup_compressed_polys-{}", pp.lookups.len()));
-        let lookup_compressed_polys = {
-            let max_lookup_width = pp.lookups.iter().map(Vec::len).max().unwrap_or_default();
-            let betas = powers(beta).take(max_lookup_width).collect_vec();
-            lookup_compressed_polys::<_, Lexical>(&pp.lookups, &polys, &challenges, &betas)
-        };
-        end_timer(timer);
-        let timer = start_timer(|| format!("lookup_m_polys-{}", pp.lookups.len()));
-        let lookup_m_polys = lookup_m_polys(&lookup_compressed_polys)?;
-        end_timer(timer);
-
-        let lookup_m_comms = Pcs::batch_commit_and_write(&ps.pcs, &lookup_m_polys, transcript)?;
-
-        // Round n+1
-
-        let gamma = transcript.squeeze_challenge();
-
-        let timer = start_timer(|| format!("lookup_h_polys-{}", pp.lookups.len()));
-        let lookup_h_polys = lookup_h_polys(&lookup_compressed_polys, &lookup_m_polys, &gamma);
-        end_timer(timer);
-
-        let timer = start_timer(|| format!("permutation_z_polys-{}", pp.permutation_polys.len()));
-        let permutation_z_polys = permutation_z_polys::<_, Lexical>(
-            pp.num_permutation_z_polys,
-            &pp.permutation_polys,
-            &polys,
-            &beta,
-            &gamma,
-        );
-        end_timer(timer);
-
-        let lookup_h_permutation_z_polys =
-            chain![lookup_h_polys.iter(), permutation_z_polys.iter()].collect_vec();
-        let lookup_h_permutation_z_comms =
-            Pcs::batch_commit_and_write(&ps.pcs, lookup_h_permutation_z_polys.clone(), transcript)?;
-
-        // Round n+2
-
-        let alpha = transcript.squeeze_challenge();
-        let y = transcript.squeeze_challenges(pp.num_vars);
-
-        let polys = chain![
-            polys,
-            pp.permutation_polys.iter().map(|(_, poly)| poly),
-            lookup_m_polys.iter(),
-            lookup_h_permutation_z_polys,
-        ]
-        .collect_vec();
-        challenges.extend([beta, gamma, alpha]);
-        let (points, evals) = prove_zero_check(
-            pp.num_instances,
-            &pp.expression,
-            &polys,
-            challenges,
-            y,
-            transcript,
-        )?;
-
-        // PCS open
-
-        let dummy_comm = Pcs::Commitment::default();
-        let preprocess_comms = pp
-            .preprocess_comms
-            .iter()
-            .map(|c| Pcs::Commitment::from(*c))
-            .collect::<Vec<_>>();
-        let permutation_comms = pp
-            .permutation_comms
-            .iter()
-            .map(|c| Pcs::Commitment::from(*c))
-            .collect::<Vec<_>>();
-        let comms = chain![
-            iter::repeat(&dummy_comm).take(pp.num_instances),
-            &preprocess_comms,
-            &witness_comms,
-            &permutation_comms,
-            &lookup_m_comms,
-            &lookup_h_permutation_z_comms,
-        ]
-        .collect_vec();
-        let timer = start_timer(|| format!("pcs_batch_open-{}", evals.len()));
-        Pcs::batch_open(&ps.pcs, polys, comms, &points, &evals, transcript)?;
-        end_timer(timer);
-
-        Ok(())
-    }
-
-    fn verify(
-        vs: &Self::VerifierSetupParam,
-        vp: &Self::VerifierParam,
-        instances: &[Vec<C::ScalarExt>],
-        transcript: &mut impl TranscriptRead<Pcs::CommitmentChunk, C::ScalarExt>,
-        _: impl RngCore,
-    ) -> Result<(), Error> {
-        assert_eq!(instances.len(), vp.num_instances);
-        for instances in instances.iter() {
-            for instance in instances.iter() {
-                transcript.common_field_element(instance)?;
-            }
-        }
-
-        // Round 0..n
-
-        let mut witness_comms = Vec::with_capacity(vp.num_witness_polys);
-        let mut challenges = Vec::with_capacity(4);
-        witness_comms.extend(Pcs::read_commitments(
-            &vs.pcs,
-            vp.num_witness_polys,
-            transcript,
-        )?);
-        // for num_polys in
-        //     vp.num_witness_polys.iter()
-        // {
-        //     witness_comms.extend(Pcs::read_commitments(&vp.pcs, *num_polys, transcript)?);
-        //     // challenges.extend(transcript.squeeze_challenges(*num_challenges));
-        // }
-
-        // Round n
-
-        let beta = transcript.squeeze_challenge();
-
-        let lookup_m_comms = Pcs::read_commitments(&vs.pcs, vp.num_lookups, transcript)?;
-
-        // Round n+1
-
-        let gamma = transcript.squeeze_challenge();
-
-        let lookup_h_permutation_z_comms = Pcs::read_commitments(
-            &vs.pcs,
-            vp.num_lookups + vp.num_permutation_z_polys,
-            transcript,
-        )?;
-
-        // Round n+2
-
-        let alpha = transcript.squeeze_challenge();
-        let y = transcript.squeeze_challenges(vp.num_vars);
-
-        challenges.extend([beta, gamma, alpha]);
-        let (points, evals) = verify_zero_check(
-            vp.num_vars,
-            &vp.expression,
-            instances,
-            &challenges,
-            &y,
-            transcript,
-        )?;
-        // PCS verify
-
-        let dummy_comm = Pcs::Commitment::default();
-        let preprocess_comms = vp
-            .preprocess_comms
-            .iter()
-            .map(|c| Pcs::Commitment::from(*c))
-            .collect::<Vec<_>>();
-        let permutation_comms = vp
-            .permutation_comms
-            .iter()
-            .map(|c| Pcs::Commitment::from(*c))
-            .collect::<Vec<_>>();
-        let comms = chain![
-            iter::repeat(&dummy_comm).take(vp.num_instances),
-            &preprocess_comms,
-            &witness_comms,
-            &permutation_comms,
-            &lookup_m_comms,
-            &lookup_h_permutation_z_comms,
-        ]
-        .collect_vec();
-        Pcs::batch_verify(&vs.pcs, comms, &points, &evals, transcript)?;
-
-        Ok(())
-    }
-
-    fn prove_with_shift(
-        ps: &Self::ProverSetupParam,
-        pp: &Self::ProverParam,
-        circuit: &impl PlonkishCircuit<C::ScalarExt>,
         transcript: &mut impl TranscriptWrite<C, C::ScalarExt>,
     ) -> Result<(), Error> {
         assert_eq!(circuit.instances().len(), pp.num_instances);
@@ -501,7 +282,7 @@ where
         ]
         .collect_vec();
         challenges.extend([beta, gamma, alpha]);
-        let (points, evals) = prove_zero_check_with_shift(
+        let (points, evals) = prove_zero_check(
             pp.num_instances,
             &pp.expression,
             &polys,
@@ -523,9 +304,7 @@ where
             .iter()
             .map(|c| Pcs::Commitment::from(*c))
             .collect::<Vec<_>>();
-        println!("pp.numinstance={}",pp.num_instances);
-        println!("pp.preprocess_comms={:?}",pp.preprocess_comms);
-        // println!("pp.witness_comms={:?}",witness_comms);
+
         let comms = chain![
             iter::repeat(&dummy_comm).take(pp.num_instances),
             &preprocess_comms,
@@ -543,7 +322,7 @@ where
         Ok(())
     }
 
-    fn verify_with_shift(
+    fn verify(
         vs: &Self::VerifierSetupParam,
         vp: &Self::VerifierParam,
         instances: &[Vec<C::ScalarExt>],
@@ -555,7 +334,6 @@ where
                 transcript.common_field_element(instance)?;
             }
         }
-
         // Round 0..n
 
         let mut witness_comms = Vec::with_capacity(vp.num_witness_polys);
@@ -588,7 +366,7 @@ where
         let y = transcript.squeeze_challenges(vp.num_vars);
 
         challenges.extend([beta, gamma, alpha]);
-        let (points, evals) = verify_zero_check_with_shift(
+        let (points, evals) = verify_zero_check(
             vp.num_vars,
             &vp.expression,
             instances,
@@ -609,9 +387,6 @@ where
             .iter()
             .map(|c| Pcs::Commitment::from(*c))
             .collect::<Vec<_>>();
-        println!("vp.numinstance={}",vp.num_instances);
-        println!("vp.preprocess_comms={:?}",preprocess_comms);
-        println!("vp.witness_comms={:?}",witness_comms);
         let comms = chain![
             iter::repeat(&dummy_comm).take(vp.num_instances),
             &preprocess_comms,
@@ -642,15 +417,10 @@ pub fn keygen_vk<E: MultiMillerLoop, T: Circuit<E::Scalar>>(
     let k = params.get_k();
     let circuit_info = frontend::halo2::get_circuit_info::<E, T>(k, circuit)?;
 
-
     let preprocess_comms = circuit_info
         .preprocess_polys
         .iter()
-        .map(|values| {
-            params
-                .commit(&Polynomial::new(values.clone()))
-                .to_affine()
-        })
+        .map(|values| params.commit(&Polynomial::new(values.clone())).to_affine())
         .collect();
 
     let permutation_polys = preprocessor::permutation_polys(

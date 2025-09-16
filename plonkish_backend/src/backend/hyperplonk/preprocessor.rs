@@ -16,10 +16,7 @@ use crate::{
     },
     Error,
 };
-use halo2_proofs::plonk::circuit::ConstraintSystem;
-use halo2_proofs::plonk::permutation;
-use halo2_proofs::plonk::VerifyingKey;
-use halo2_proofs::poly::domain::EvaluationDomain;
+
 use std::{array, borrow::Cow, mem};
 
 pub(crate) fn batch_size<F: PrimeField>(circuit_info: &PlonkishCircuitInfo<F>) -> usize {
@@ -98,7 +95,6 @@ pub(crate) fn preprocess<
         .iter()
         .map(|c: &Pcs::Commitment| c.as_ref()[0])
         .collect::<Vec<_>>();
-    println!("permutation_comms={:?}",permutation_comms);
     let vp = HyperPlonkVerifierParam::<C> {
         num_instances: circuit_info.num_instances,
         num_witness_polys: circuit_info.num_witness_polys,
@@ -128,17 +124,6 @@ pub(crate) fn preprocess<
     };
     let ps = HyperPlonkProverSetupParam { pcs: pcs_pp };
     let vs = HyperPlonkVerifierSetupParam { pcs: pcs_vp };
-
-    // let domain = EvaluationDomain::new(1,2);
-    // let commitments = permutation_comms.iter().map(|c:&Pcs::Commitment|c.as_ref()[0]).collect::<Vec<_>>();
-    // let permutation = permutation::VerifyingKey{commitments};
-    // let vk = VerifyingKey{
-    //     domain,
-    //     fixed_commitments:vp.preprocess_comms.iter().map(|c:&Pcs::Commitment|c.as_ref()[0]).collect::<Vec<_>>(),
-    //     permutation,
-    //     cs:ConstraintSystem::default()
-    // };
-    // Ok((pp, vp,ps,vs,vk))
     Ok((pp, vp, ps, vs))
 }
 

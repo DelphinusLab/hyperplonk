@@ -15,7 +15,6 @@ use crate::{
     },
     Error,
 };
-use halo2_proofs::helpers::CurveRead;
 use rand::RngCore;
 use std::{marker::PhantomData, ops::Neg, slice};
 
@@ -65,7 +64,7 @@ impl<M: MultiMillerLoop> UnivariateKzgParam<M> {
             k,
             monomial_g1,
             lagrange_g1: lag_g1,
-            powers_of_s_g2: vec![g2,s_g2],
+            powers_of_s_g2: vec![g2, s_g2],
         }
     }
     pub fn k(&self) -> usize {
@@ -269,7 +268,11 @@ where
         _: usize,
     ) -> Result<(Self::ProverParam, Self::VerifierParam), Error> {
         assert!(poly_size.is_power_of_two());
-        println!("trim.monomial_g1.len={},poly_size={}",param.monomial_g1.len(),poly_size);
+        println!(
+            "trim.monomial_g1.len={},poly_size={}",
+            param.monomial_g1.len(),
+            poly_size
+        );
         if param.monomial_g1.len() < poly_size {
             return Err(err_too_large_deree("trim", param.degree(), poly_size - 1));
         }
@@ -337,7 +340,7 @@ where
             }
         }
         let pi = Self::commit_monomial(pp, quotient.coeffs()).0;
-        println!("prove.quotient.pi={:?}",pi);
+        println!("prove.quotient.pi={:?}", pi);
         // transcript.write_commitment(&Self::commit_monomial(pp, quotient.coeffs()).0)?;
         transcript.write_commitment(&pi)?;
         Ok(())

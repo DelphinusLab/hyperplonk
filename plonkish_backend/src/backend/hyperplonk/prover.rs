@@ -1,6 +1,6 @@
 use crate::{
-    backend::hyperplonk::verifier::{pcs_query, point_offset, points},
-    pcs::{evaluation_for_shift, Evaluation},
+    backend::hyperplonk::verifier::pcs_query,
+    pcs::EvaluationForShift,
     piop::sum_check::{
         classic::{ClassicSumCheck, EvaluationsProver},
         SumCheck, VirtualPolynomial,
@@ -10,8 +10,8 @@ use crate::{
         arithmetic::{div_ceil, steps_by, sum, BatchInvert, PrimeField},
         chain, end_timer,
         expression::{
-            rotate::{BinaryField, Lexical, Rotatable},
-            CommonPolynomial, Expression, Rotation,
+            rotate::{Lexical, Rotatable},
+            CommonPolynomial, Expression,
         },
         parallel::{num_threads, par_map_collect, parallelize, parallelize_iter},
         start_timer,
@@ -339,71 +339,7 @@ pub(super) fn prove_zero_check<F: PrimeField>(
     challenges: Vec<F>,
     y: Vec<F>,
     transcript: &mut impl FieldTranscriptWrite<F>,
-) -> Result<(Vec<Vec<F>>, Vec<Evaluation<F>>), Error> {
-    prove_sum_check(
-        num_instance_poly,
-        expression,
-        F::zero(),
-        polys,
-        challenges,
-        y,
-        transcript,
-    )
-}
-
-#[allow(clippy::type_complexity)]
-pub(crate) fn prove_sum_check<F: PrimeField>(
-    num_instance_poly: usize,
-    expression: &Expression<F>,
-    sum: F,
-    polys: &[&MultilinearPolynomial<F>],
-    challenges: Vec<F>,
-    y: Vec<F>,
-    transcript: &mut impl FieldTranscriptWrite<F>,
-) -> Result<(Vec<Vec<F>>, Vec<Evaluation<F>>), Error> {
-    let num_vars = polys[0].num_vars();
-    let ys = [y];
-    let virtual_poly = VirtualPolynomial::new(expression, polys.to_vec(), &challenges, &ys);
-    let (_, x, evals) = ClassicSumCheck::<EvaluationsProver<_>, Lexical>::prove(
-        &(),
-        num_vars,
-        virtual_poly,
-        sum,
-        transcript,
-    )?;
-
-    let pcs_query = pcs_query(expression, num_instance_poly);
-    let point_offset = point_offset(&pcs_query);
-
-    let timer = start_timer(|| format!("evals-{}", pcs_query.len()));
-    let evals = pcs_query
-        .iter()
-        .flat_map(|query| {
-            (point_offset[&query.rotation()]..)
-                .zip(if query.rotation() == Rotation::cur() {
-                    vec![evals[query]]
-                } else {
-                    polys[query.poly()].evaluate_for_rotation(&x, query.rotation())
-                })
-                .map(|(point, eval)| Evaluation::new(query.poly(), point, eval))
-        })
-        .collect_vec();
-    end_timer(timer);
-
-    transcript.write_field_elements(evals.iter().map(Evaluation::value))?;
-
-    Ok((points(&pcs_query, &x), evals))
-}
-
-#[allow(clippy::type_complexity)]
-pub(super) fn prove_zero_check_with_shift<F: PrimeField>(
-    num_instance_poly: usize,
-    expression: &Expression<F>,
-    polys: &[&MultilinearPolynomial<F>],
-    challenges: Vec<F>,
-    y: Vec<F>,
-    transcript: &mut impl FieldTranscriptWrite<F>,
-) -> Result<(Vec<Vec<F>>, Vec<evaluation_for_shift<F>>), Error> {
+) -> Result<(Vec<Vec<F>>, Vec<EvaluationForShift<F>>), Error> {
     prove_sum_check_with_shift(
         num_instance_poly,
         expression,
@@ -424,7 +360,7 @@ pub(crate) fn prove_sum_check_with_shift<F: PrimeField>(
     challenges: Vec<F>,
     y: Vec<F>,
     transcript: &mut impl FieldTranscriptWrite<F>,
-) -> Result<(Vec<Vec<F>>, Vec<evaluation_for_shift<F>>), Error> {
+) -> Result<(Vec<Vec<F>>, Vec<EvaluationForShift<F>>), Error> {
     let num_vars = polys[0].num_vars();
     let ys = [y];
     let virtual_poly = VirtualPolynomial::new(expression, polys.to_vec(), &challenges, &ys);
@@ -442,11 +378,11 @@ pub(crate) fn prove_sum_check_with_shift<F: PrimeField>(
 
     let evals = pcs_query
         .iter()
-        .map(|query| evaluation_for_shift::new(query.poly(), query.rotation(), evals[query]))
+        .map(|query| EvaluationForShift::new(query.poly(), query.rotation(), evals[query]))
         .collect_vec();
     end_timer(timer);
 
-    transcript.write_field_elements(evals.iter().map(evaluation_for_shift::value))?;
+    transcript.write_field_elements(evals.iter().map(EvaluationForShift::value))?;
 
     Ok((vec![x], evals))
 }

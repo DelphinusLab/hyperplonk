@@ -1,4 +1,3 @@
-use crate::backend::WitnessEncoding;
 use crate::util::expression::rotate::{Lexical, Rotatable};
 use halo2_proofs::{
     arithmetic::MultiMillerLoop,
@@ -15,7 +14,6 @@ pub struct ZKWASMCircuit<'a, E: MultiMillerLoop, C: Circuit<E::Scalar>> {
     pub instances_scalar: Vec<Vec<E::Scalar>>,
     pub row_mapping: Vec<usize>,
 }
-
 
 pub fn get_zkwasm_circuit<E: MultiMillerLoop, T>(
     k: u32,
@@ -39,8 +37,8 @@ where
         config,
         cs,
         k,
-        instances:instances.clone(),
-        instances_scalar:instances,
+        instances: instances.clone(),
+        instances_scalar: instances,
         row_mapping: Lexical::new(k as usize).usable_indices(),
     }
 }

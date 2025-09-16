@@ -106,7 +106,7 @@ fn quotients<F: Field, T>(
 mod additive {
     use crate::{
         pcs::{
-            evaluation_for_shift, multilinear::validate_input, Additive, Evaluation, Point,
+            multilinear::validate_input, Additive, Evaluation, EvaluationForShift, Point,
             PolynomialCommitmentScheme,
         },
         piop::sum_check::{
@@ -124,7 +124,6 @@ mod additive {
         },
         Error,
     };
-    use std::collections::BTreeMap;
     use std::{borrow::Cow, collections::HashMap, ops::Deref, ptr::addr_of};
 
     type SumCheck<F> = ClassicSumCheck<CoefficientsProver<F>>;
@@ -154,13 +153,7 @@ mod additive {
                     .count(),
                 points.len()
             );
-            // for (i, eval) in evals.iter().enumerate() {
-            //     println!("poly i={},poly={}", i, eval.poly);
-            //     let (poly, point) = (&polys[eval.poly()], &points[eval.point()]);
-            //     println!("poly {:?},eval={:?}", poly.evaluate(point), *eval.value());
-            // }
-            for (i, eval) in evals.iter().enumerate() {
-                // println!("poly i={},poly={}", i, eval.poly);
+            for eval in evals.iter() {
                 let (poly, point) = (&polys[eval.poly()], &points[eval.point()]);
                 assert_eq!(poly.evaluate(point), *eval.value());
             }
@@ -252,418 +245,6 @@ mod additive {
         )
     }
 
-    pub fn batch_open_for_shift_old<F, Pcs>(
-        pp: &Pcs::ProverParam,
-        num_vars: usize,
-        polys: Vec<&Pcs::Polynomial>,
-        comms: Vec<&Pcs::Commitment>,
-        points: &[Point<F, Pcs::Polynomial>],
-        evals: &[evaluation_for_shift<F>],
-        transcript: &mut impl TranscriptWrite<Pcs::CommitmentChunk, F>,
-    ) -> Result<(), Error>
-    where
-        F: PrimeField,
-        Pcs: PolynomialCommitmentScheme<F, Polynomial = MultilinearPolynomial<F>>,
-        Pcs::Commitment: Additive<F>,
-    {
-        // validate poly and point
-        validate_input("batch open", num_vars, polys.clone(), points)?;
-
-        if cfg!(feature = "sanity-check") {
-            assert_eq!(
-                points
-                    .iter()
-                    .map(|point| point.iter().map(fe_to_bytes::<F>).collect_vec())
-                    .unique()
-                    .count(),
-                points.len()
-            );
-            for eval in evals {
-                let (poly, rotation) = (&polys[eval.poly()], eval.rotation());
-                assert_eq!(
-                    poly.evaluate_for_rotation(&points[0], eval.rotation())[0],
-                    *eval.value()
-                );
-            }
-        }
-
-        // --- Part 1: Handle Rotation::cur() evaluations ---
-        let ell = evals.len().next_power_of_two().ilog2() as usize;
-        let t = transcript.squeeze_challenges(ell);
-
-        let timer = start_timer(|| "merged_polys (cur)");
-        let eq_xt = MultilinearPolynomial::eq_xy(&t);
-
-        let evals_cur = evals
-            .iter()
-            .filter(|eval| eval.rotation() == Rotation::cur())
-            .collect_vec();
-
-        // Check if there are any current rotation evaluations
-        if !evals_cur.is_empty() {
-            let merged_polys_cur = evals_cur.iter().zip(eq_xt.evals().iter()).fold(
-                (F::one(), Cow::<MultilinearPolynomial<_>>::default()),
-                |mut merged_polys, (eval, eq_xt_i)| {
-                    let poly_ref = polys[eval.poly()];
-                    if merged_polys.1.is_empty() {
-                        merged_polys = (*eq_xt_i, Cow::Borrowed(poly_ref));
-                    } else {
-                        let coeff = merged_polys.0;
-                        if coeff != F::one() {
-                            merged_polys.0 = F::one();
-                            *merged_polys.1.to_mut() *= &coeff;
-                        }
-                        // Ensure the polynomial being added has the correct number of variables
-                        assert_eq!(
-                            merged_polys.1.num_vars(),
-                            poly_ref.num_vars(),
-                            "Mismatched num_vars in merging"
-                        );
-                        *merged_polys.1.to_mut() += (*eq_xt_i, poly_ref);
-                    }
-                    merged_polys
-                },
-            );
-            end_timer(timer);
-
-            let expression_cur = Expression::<F>::eq_xy(0)
-                * Expression::Polynomial(Query::new(0, Rotation::cur()))
-                * merged_polys_cur.0;
-
-            // Ensure merged polynomial has correct num_vars if it wasn't empty
-            if !merged_polys_cur.1.is_empty() {
-                assert_eq!(
-                    merged_polys_cur.1.num_vars(),
-                    num_vars,
-                    "Merged polynomial has incorrect num_vars"
-                );
-            }
-
-            let virtual_poly_cur = VirtualPolynomial::new(
-                &expression_cur,
-                if merged_polys_cur.1.is_empty() {
-                    vec![] // Handle case where there are no Rotation::cur evaluations gracefully
-                } else {
-                    vec![merged_polys_cur.1.deref()]
-                },
-                &[],
-                points,
-            );
-
-            let tilde_gs_sum_cur = inner_product(
-                evals_cur.iter().map(|eval| eval.value()),
-                &eq_xt[..evals_cur.len()],
-            );
-
-            let commitment_cur = if cfg!(feature = "sanity-check") {
-                let scalars = evals_cur
-                    .iter()
-                    .zip(eq_xt.evals())
-                    .map(|(eval, eq_xt_i)| *eq_xt_i) // Dereference eq_xt_i
-                    .collect_vec();
-                let bases = evals_cur.iter().map(|eval| comms[eval.poly()]);
-                Pcs::Commitment::msm(&scalars, bases)
-            } else {
-                Pcs::Commitment::default()
-            };
-
-            Pcs::open(
-                pp,
-                &merged_polys_cur.1,
-                &commitment_cur,
-                &points[0],
-                &tilde_gs_sum_cur,
-                transcript,
-            )?;
-
-            // println!("open_for_shift_cur done");
-        } // End if !evals_cur.is_empty()
-
-        // --- Part 2: Handle Rotated evaluations ---
-        let eval_rotations = evals
-            .iter()
-            .filter(|eval| eval.rotation() != Rotation::cur())
-            .collect_vec();
-
-        if eval_rotations.is_empty() {
-            return Ok(()); // No rotated evaluations to process
-        }
-
-        // Group evaluations by rotation
-        let mut evals_by_rotation: HashMap<Rotation, Vec<&evaluation_for_shift<F>>> =
-            HashMap::new();
-        for eval in eval_rotations {
-            evals_by_rotation
-                .entry(eval.rotation())
-                .or_default()
-                .push(eval);
-        }
-
-        // Process each rotation group
-        for (rotation, rotation_evals) in evals_by_rotation {
-            // Extract necessary info for this rotation group
-            let polys_rotated: Vec<&MultilinearPolynomial<F>> = rotation_evals
-                .iter()
-                .map(|eval| polys[eval.poly()])
-                .collect();
-            // println!("=======================================================");
-            // println!("polys_rotated: {:?}", polys_rotated);
-            // println!("=======================================================");
-            let comms_rotated: Vec<&Pcs::Commitment> = rotation_evals
-                .iter()
-                .map(|eval| comms[eval.poly()])
-                .collect();
-            // Get references to the values
-            let values_rotated: Vec<&F> = rotation_evals.iter().map(|eval| eval.value()).collect();
-
-            if polys_rotated.is_empty() {
-                continue; // Skip if no polynomials for this rotation
-            }
-
-            // Squeeze challenges *only* for combining polynomials within this group
-            let num_rotated = rotation_evals.len();
-
-            let ell_rotated = if num_rotated == 1 {
-                2
-            } else {
-                num_rotated.next_power_of_two().ilog2() as usize
-            };
-
-            let challenges_rotated_combine = transcript.squeeze_challenges(ell_rotated);
-            let eq_xt_rotated = MultilinearPolynomial::eq_xy(&challenges_rotated_combine);
-
-            // Combine polynomials for the current rotation
-            let timer = start_timer(|| format!("merged_polys ({:?})", rotation));
-
-            let merged_poly_rotated_cow = rotation_evals
-                .iter()
-                .zip(eq_xt_rotated.evals().iter())
-                .fold(
-                    // Initialize with scalar 1 and default (empty) polynomial
-                    (F::one(), Cow::<MultilinearPolynomial<_>>::default()),
-                    |mut merged, (eval, eq_xt_i)| {
-                        let poly_ref = polys[eval.poly()];
-                        if merged.1.is_empty() {
-                            // First polynomial, borrow it with the coefficient
-                            merged = (*eq_xt_i, Cow::Borrowed(poly_ref));
-                        } else {
-                            // Subsequent polynomials, ensure we have a mutable owned version
-                            let coeff = merged.0;
-                            if coeff != F::one() {
-                                // Apply previous scalar before adding the new poly
-                                *merged.1.to_mut() *= &coeff;
-                                merged.0 = F::one(); // Reset scalar after applying
-                            }
-                            // Add the new polynomial scaled by its eq_xt_i coefficient
-                            assert_eq!(
-                                merged.1.num_vars(),
-                                poly_ref.num_vars(),
-                                "Mismatched num_vars in merging rotated"
-                            );
-                            *merged.1.to_mut() += (*eq_xt_i, poly_ref);
-                        }
-                        merged
-                    },
-                );
-            end_timer(timer);
-
-            // Handle the final scalar if it wasn't applied in the loop
-            let (merged_scalar, merged_poly_cow) = merged_poly_rotated_cow;
-            let mut merged_poly_owned = merged_poly_cow.into_owned(); // Get owned version
-            if merged_scalar != F::one() {
-                merged_poly_owned *= &merged_scalar; // Apply final scalar
-            }
-
-            // println!("merged_poly_owned: {:?}", merged_poly_owned.evals());
-            // println!("=======================================================");
-            if merged_poly_owned.is_empty() {
-                // This case should ideally not happen if polys_rotated wasn't empty,
-                // but handle defensively.
-                println!(
-                    "Warning: Merged polynomial is unexpectedly empty for rotation {:?}",
-                    rotation
-                );
-                continue;
-            }
-
-            // Compute the combined evaluation value for the merged polynomial
-            // Pass references using eval.value() and copy eq_xt values
-            let merged_value = inner_product(
-                values_rotated.iter().copied(),      // Dereference to get &F
-                eq_xt_rotated[..num_rotated].iter(), // Pass iterator of F
-            );
-            // Apply the overall scalar to the combined value as well
-            // let final_merged_value = merged_value * merged_scalar;
-
-            // Calculate the commitment to the merged polynomial for this rotation using MSM
-            let merged_comm_rotated = if cfg!(feature = "sanity-check") {
-                // Calculate scalars for MSM: eq_xt_i * overall_scalar
-                let scalars = eq_xt_rotated.evals()[..num_rotated]
-                    .iter()
-                    .map(|eq_val| *eq_val * merged_scalar)
-                    .collect_vec();
-                Pcs::Commitment::msm(&scalars, comms_rotated) // Ensure signature matches Additive trait
-            } else {
-                // Should not happen if polys_rotated is not empty, but provide default
-                Pcs::Commitment::default()
-            };
-
-            // --- Apply Zeromorph Logic (Adapted) ---
-            // Defer challenge squeezing (y, z) and a_0 calculation to the PCS function.
-            // Pass the transcript mutable reference.
-
-            Pcs::prove_shifted_evaluation(
-                pp,
-                &merged_poly_owned,   // The combined polynomial f (already scaled)
-                &merged_comm_rotated, // Commitment to f
-                &points[0],           // Target evaluation point u (Vec<F>)
-                &merged_value,        // Target evaluation value v = f_shifted(u) (scaled)
-                &rotation,            // The specific rotation being proven
-                transcript,           // Pass the transcript for internal challenge squeezing
-            )?;
-            /* --- End Placeholder --- */
-        } // End loop over rotations
-
-        Ok(())
-    }
-
-    // unify rotated and un-rotated evals and merge together.
-    // commit rotated polys by sort.
-    pub fn batch_open_for_shift_unify<F, Pcs>(
-        pp: &Pcs::ProverParam,
-        num_vars: usize,
-        polys: Vec<&Pcs::Polynomial>,
-        comms: Vec<&Pcs::Commitment>,
-        points: &[Point<F, Pcs::Polynomial>],
-        evals: &[evaluation_for_shift<F>],
-        transcript: &mut impl TranscriptWrite<Pcs::CommitmentChunk, F>,
-    ) -> Result<(), Error>
-    where
-        F: PrimeField,
-        Pcs: PolynomialCommitmentScheme<F, Polynomial = MultilinearPolynomial<F>>,
-        Pcs::Commitment: Additive<F>,
-    {
-        // validate poly and point
-        validate_input("batch open", num_vars, polys.clone(), points)?;
-
-        if cfg!(feature = "sanity-check") {
-            assert_eq!(
-                points
-                    .iter()
-                    .map(|point| point.iter().map(fe_to_bytes::<F>).collect_vec())
-                    .unique()
-                    .count(),
-                points.len()
-            );
-            for eval in evals {
-                let (poly, rotation) = (&polys[eval.poly()], eval.rotation());
-                assert_eq!(
-                    poly.evaluate_for_rotation(&points[0], eval.rotation())[0],
-                    *eval.value()
-                );
-            }
-        }
-
-        //  merge Rotation::cur() and not Rotation::cur() evaluations ---
-        let ell = evals.len().next_power_of_two().ilog2() as usize;
-        let t = transcript.squeeze_challenges(ell);
-
-        let eq_xt = MultilinearPolynomial::eq_xy(&t);
-        //sort rotated eval(poly, rotation) by BTree
-        let rotate_polys: BTreeMap<_, _> = evals
-            .iter()
-            .filter(|eval| eval.rotation() != Rotation::cur())
-            .map(|eval| {
-                // Use the i32 value to check the sign, and distance() for magnitude
-                let signed_d = eval.rotation().0;
-                let abs_d = eval.rotation().distance(); // Get magnitude (usize)
-                let mut poly_d_evals = polys[eval.poly()].evals().to_vec();
-                if signed_d > 0 {
-                    poly_d_evals.rotate_left(abs_d);
-                } else {
-                    poly_d_evals.rotate_right(abs_d);
-                }
-                (
-                    Query::new(eval.poly(), eval.rotation()),
-                    MultilinearPolynomial::new(poly_d_evals),
-                )
-            })
-            .collect();
-
-        let rotate_polys_vec = rotate_polys.iter().map(|r| r.1).collect_vec();
-        // commit the sorted rotated poly for verifier
-        let rotate_polys_comms = Pcs::batch_commit_and_write(pp, rotate_polys_vec, transcript)?;
-        let rotate_polys_comms_map: BTreeMap<_, _> = rotate_polys
-            .iter()
-            .zip(rotate_polys_comms.iter())
-            .map(|(poly, comm)| (poly.0.clone(), comm))
-            .collect();
-
-        // unify rotated and un-rotated polys
-        let merged_polys_cur = evals.iter().zip(eq_xt.evals().iter()).fold(
-            (F::one(), Cow::<MultilinearPolynomial<_>>::default()),
-            |mut merged_polys, (eval, eq_xt_i)| {
-                let poly_ref = if eval.rotation() != Rotation::cur() {
-                    &rotate_polys[&Query::new(eval.poly(), eval.rotation())]
-                } else {
-                    polys[eval.poly()]
-                };
-                if merged_polys.1.is_empty() {
-                    merged_polys = (*eq_xt_i, Cow::Borrowed(poly_ref));
-                } else {
-                    let coeff = merged_polys.0;
-                    if coeff != F::one() {
-                        merged_polys.0 = F::one();
-                        *merged_polys.1.to_mut() *= &coeff;
-                    }
-                    // Ensure the polynomial being added has the correct number of variables
-                    assert_eq!(
-                        merged_polys.1.num_vars(),
-                        poly_ref.num_vars(),
-                        "Mismatched num_vars in merging"
-                    );
-                    *merged_polys.1.to_mut() += (*eq_xt_i, poly_ref);
-                }
-                merged_polys
-            },
-        );
-
-        let tilde_gs_sum_cur =
-            inner_product(evals.iter().map(|eval| eval.value()), &eq_xt[..evals.len()]);
-
-        let commitment_cur = if cfg!(feature = "sanity-check") {
-            let scalars = evals
-                .iter()
-                .zip(eq_xt.evals())
-                .map(|(eval, eq_xt_i)| *eq_xt_i) // Dereference eq_xt_i
-                .collect_vec();
-            let bases = evals
-                .iter()
-                .map(|eval| {
-                    if eval.rotation() != Rotation::cur() {
-                        rotate_polys_comms_map[&Query::new(eval.poly(), eval.rotation())]
-                    } else {
-                        comms[eval.poly()]
-                    }
-                })
-                .collect_vec();
-            Pcs::Commitment::msm(&scalars, bases)
-        } else {
-            Pcs::Commitment::default()
-        };
-
-        Pcs::open(
-            pp,
-            &merged_polys_cur.1,
-            &commitment_cur,
-            &points[0],
-            &tilde_gs_sum_cur,
-            transcript,
-        )?;
-
-        Ok(())
-    }
-
     // merge all rotated polys to one and commit in advance.
     // un-rotated poly add the merged rotated poly directly.
     pub fn batch_open_for_shift<F, Pcs>(
@@ -672,7 +253,7 @@ mod additive {
         polys: Vec<&Pcs::Polynomial>,
         comms: Vec<&Pcs::Commitment>,
         points: &[Point<F, Pcs::Polynomial>],
-        evals: &[evaluation_for_shift<F>],
+        evals: &[EvaluationForShift<F>],
         transcript: &mut impl TranscriptWrite<Pcs::CommitmentChunk, F>,
     ) -> Result<(), Error>
     where
@@ -693,9 +274,8 @@ mod additive {
                 points.len()
             );
             for eval in evals {
-                let (poly, rotation) = (&polys[eval.poly()], eval.rotation());
                 assert_eq!(
-                    poly.evaluate_for_rotation(&points[0], eval.rotation())[0],
+                    polys[eval.poly()].evaluate_for_rotation(&points[0], eval.rotation())[0],
                     *eval.value()
                 );
             }
@@ -707,25 +287,15 @@ mod additive {
 
         let eq_xt = MultilinearPolynomial::eq_xy(&t);
 
-        let mut evals_cur = evals
+        let evals_cur = evals
             .iter()
             .filter(|eval| eval.rotation() == Rotation::cur())
             .collect_vec();
-        // for s in evals_cur.iter(){
-        //     println!("prove.eval={:?}",s);
-        // }
-        // for s in comms.iter(){
-        //     println!("comms={:?}",s);
-        // }
+
         let evals_rotate = evals
             .iter()
             .filter(|eval| eval.rotation() != Rotation::cur())
             .collect_vec();
-        // println!(
-        //     "evals_rotate.len={},eval_cur={}",
-        //     evals_rotate.len(),
-        //     evals_cur.len()
-        // );
 
         // merge all rotated polys, not limited to identical rotated polys
         let rotate_polys = evals_rotate
@@ -746,50 +316,42 @@ mod additive {
             })
             .collect_vec();
 
-        let merged_polys_fn = |evals: &[&evaluation_for_shift<F>],
-                               eq_xt: &[F]|
-         -> (F, Cow<MultilinearPolynomial<F>>) {
-            evals.iter().zip(eq_xt.iter()).enumerate().fold(
-                (F::one(), Cow::<MultilinearPolynomial<_>>::default()),
-                |mut merged_polys, (i, (&eval, eq_xt_i))| {
-                    let poly_ref = if eval.rotation != Rotation::cur() {
-                        // println!("merge rot poly={:?},poly_idex={}",rotate_polys[i],i);
-                        &rotate_polys[i]
-                    } else {
-                        // println!("merge cur poly={:?},poly_idex={}",polys[eval.poly()],eval.poly());
-                        polys[eval.poly()]
-                    };
-                    if merged_polys.1.is_empty() {
-                        // println!("merge is empty,eqt={:?},poly={:?}",eq_xt_i,poly_ref.evals());
-                        merged_polys = (*eq_xt_i, Cow::Borrowed(poly_ref));
-                    } else {
-                        let coeff = merged_polys.0;
-                        if coeff != F::one() {
-                            merged_polys.0 = F::one();
-                            *merged_polys.1.to_mut() *= &coeff;
+        let merged_polys_fn =
+            |evals: &[&EvaluationForShift<F>], eq_xt: &[F]| -> (F, Cow<MultilinearPolynomial<F>>) {
+                evals.iter().zip(eq_xt.iter()).enumerate().fold(
+                    (F::one(), Cow::<MultilinearPolynomial<_>>::default()),
+                    |mut merged_polys, (i, (&eval, eq_xt_i))| {
+                        let poly_ref = if eval.rotation != Rotation::cur() {
+                            &rotate_polys[i]
+                        } else {
+                            polys[eval.poly()]
+                        };
+                        if merged_polys.1.is_empty() {
+                            merged_polys = (*eq_xt_i, Cow::Borrowed(poly_ref));
+                        } else {
+                            let coeff = merged_polys.0;
+                            if coeff != F::one() {
+                                merged_polys.0 = F::one();
+                                *merged_polys.1.to_mut() *= &coeff;
+                            }
+                            // Ensure the polynomial being added has the correct number of variables
+                            assert_eq!(
+                                merged_polys.1.num_vars(),
+                                poly_ref.num_vars(),
+                                "Mismatched num_vars in merging"
+                            );
+                            *merged_polys.1.to_mut() += (*eq_xt_i, poly_ref);
                         }
-                        // Ensure the polynomial being added has the correct number of variables
-                        assert_eq!(
-                            merged_polys.1.num_vars(),
-                            poly_ref.num_vars(),
-                            "Mismatched num_vars in merging"
-                        );
-                        *merged_polys.1.to_mut() += (*eq_xt_i, poly_ref);
-                    }
-                    merged_polys
-                },
-            )
-        };
+                        merged_polys
+                    },
+                )
+            };
         //TODO test no rotate case  and all rotate case
-        println!("merge rotate poly");
         let mut merged_polys_rotate = merged_polys_fn(&evals_rotate, &eq_xt[evals_cur.len()..]);
         if merged_polys_rotate.0 != F::one() {
             *merged_polys_rotate.1.to_mut() *= &merged_polys_rotate.0;
             merged_polys_rotate.0 = F::one();
         }
-        // for (eval,xt) in evals_rotate.iter().zip(eq_xt[evals_cur.len()..evals.len()].iter()){
-        //     println!("rotation eval={:?},xt={:?}",eval,xt);
-        // }
 
         let merged_evals_rotate = inner_product(
             evals_rotate.iter().map(|eval| eval.value()),
@@ -797,16 +359,14 @@ mod additive {
         );
 
         let rotate_polys_comms = Pcs::commit_and_write(pp, &merged_polys_rotate.1, transcript)?;
-        println!("prove.rotate_polys_comms={:?}",rotate_polys_comms);
         if cfg!(feature = "sanity-check") {
-            if evals_rotate.len()>0{
+            if evals_rotate.len() > 0 {
                 assert_eq!(
                     merged_polys_rotate.1.evaluate(&points[0]),
                     merged_evals_rotate
                 );
             }
         }
-        println!("merge cur poly");
         let mut merged_polys_cur = merged_polys_fn(&evals_cur, &eq_xt.evals());
         if merged_polys_cur.0 != F::one() {
             *merged_polys_cur.1.to_mut() *= &merged_polys_cur.0;
@@ -819,36 +379,24 @@ mod additive {
             &eq_xt[..evals_cur.len()],
         );
         let tilde_gs_sum_cur = tilde_gs_sum_cur + merged_evals_rotate;
-        println!("prove.tilde_gs_sum_cur={:?}",tilde_gs_sum_cur);
         if cfg!(feature = "sanity-check") {
             assert_eq!(merged_polys_cur.1.evaluate(&points[0]), tilde_gs_sum_cur);
         }
 
         let commitment_cur = if cfg!(feature = "sanity-check") {
-            let mut scalars = evals_cur
-                .iter()
-                .zip(eq_xt.evals())
-                .map(|(eval, eq_xt_i)| *eq_xt_i) // Dereference eq_xt_i
-                .collect_vec();
-            scalars.push(F::one());
-            // for s in scalars.iter(){
-            //     println!("prove.scalars={:?}",s);
-            // }
+            let mut scalars = eq_xt.evals()[..evals_cur.len()].to_vec();
+            scalars.push(F::one()); //scalar for rotate_polys_comms
 
             let mut bases = evals_cur
                 .iter()
                 .map(|eval| comms[eval.poly()])
                 .collect_vec();
             bases.push(&rotate_polys_comms);
-            // for s in bases.iter(){
-            //     println!("prove.bases={:?}",s);
-            // }
 
             Pcs::Commitment::msm(&scalars, bases)
         } else {
             Pcs::Commitment::default()
         };
-        println!("prove.commitment_cur={:?}",commitment_cur);
         Pcs::open(
             pp,
             &merged_polys_cur.1,
@@ -861,13 +409,13 @@ mod additive {
         Ok(())
     }
 
-   // merge all rotated polys to one and commit in advance.
+    // merge all rotated polys to one and commit in advance.
     pub fn batch_verify_for_shift<F, Pcs>(
         vp: &Pcs::VerifierParam,
         num_vars: usize,
         comms: Vec<&Pcs::Commitment>,
         points: &[Point<F, Pcs::Polynomial>],
-        evals: &[evaluation_for_shift<F>],
+        evals: &[EvaluationForShift<F>],
         transcript: &mut impl TranscriptRead<Pcs::CommitmentChunk, F>,
     ) -> Result<(), Error>
     where
@@ -882,7 +430,6 @@ mod additive {
 
         //read rotate poly's commits
         let rotate_polys_comm = Pcs::read_commitment(vp, transcript)?;
-        println!("verify.rotate_polys_comm={:?}",rotate_polys_comm);
 
         let eq_xt = MultilinearPolynomial::eq_xy(&t);
 
@@ -890,12 +437,7 @@ mod additive {
             .iter()
             .filter(|eval| eval.rotation() == Rotation::cur())
             .collect_vec();
-        // for s in evals_cur.iter(){
-        //     println!("eval={:?}",s);
-        // }
-        // for s in comms.iter(){
-        //     println!("comms={:?}",s);
-        // }
+
         let tilde_gs_sum = inner_product(
             evals_cur.iter().map(|eval| eval.value()),
             &eq_xt[..evals_cur.len()],
@@ -911,26 +453,18 @@ mod additive {
             &eq_xt[evals_cur.len()..evals.len()],
         );
         let tilde_gs_sum = tilde_gs_sum + rotate_evals_sum;
-        println!("verify.tilde_gs_sum={:?}",tilde_gs_sum);
         let commitment_cur = {
-            let mut scalars = evals_cur
-                .iter()
-                .zip(eq_xt.evals())
-                .map(|(eval, eq_xt_i)| *eq_xt_i) // Dereference eq_xt_i
-                .collect_vec();
-            //rotate_polys_comm has already multiplied ex_xts
+            let mut scalars = eq_xt.evals()[..evals_cur.len()].to_vec();
+            //rotate_polys_comm has already multiplied ex_xts, here set scalar to 1
             scalars.push(F::one());
 
             let bases = evals_cur
                 .iter()
                 .map(|eval| comms[eval.poly()])
-                .chain(std::iter::once(&rotate_polys_comm)).collect::<Vec<_>>();
-            // for s in bases.iter(){
-            //     println!("verify.bases={:?}",s);
-            // }
+                .chain(std::iter::once(&rotate_polys_comm))
+                .collect::<Vec<_>>();
             Pcs::Commitment::msm(&scalars, bases)
         };
-        println!("verify.commitment_cur={:?}",commitment_cur);
         Pcs::verify(vp, &commitment_cur, &points[0], &tilde_gs_sum, transcript)
     }
 
@@ -972,131 +506,5 @@ mod additive {
             Pcs::Commitment::msm(&scalars, bases)
         };
         Pcs::verify(vp, &g_prime_comm, &challenges, &g_prime_eval, transcript)
-    }
-
-    pub fn batch_verify_for_shift_unity<F, Pcs>(
-        vp: &Pcs::VerifierParam,
-        num_vars: usize,
-        comms: Vec<&Pcs::Commitment>,
-        points: &[Point<F, Pcs::Polynomial>],
-        evals: &[evaluation_for_shift<F>],
-        transcript: &mut impl TranscriptRead<Pcs::CommitmentChunk, F>,
-    ) -> Result<(), Error>
-    where
-        F: PrimeField,
-        Pcs: PolynomialCommitmentScheme<F, Polynomial = MultilinearPolynomial<F>>,
-        Pcs::Commitment: Additive<F>,
-    {
-        validate_input("batch verify", num_vars, [], points)?;
-
-        let rotate_evals = evals
-            .iter()
-            .filter(|eval| eval.rotation() != Rotation::cur())
-            .collect_vec();
-
-        //read rotate poly's commits
-        let rotate_polys_comms = Pcs::read_commitments(vp, rotate_evals.len(), transcript)?;
-        //sort commits sequence by BTreeMap
-        let mut rotate_poly_comms_map: BTreeMap<
-            _,
-            Option<&<Pcs as PolynomialCommitmentScheme<F>>::Commitment>,
-        > = rotate_evals
-            .iter()
-            .map(|eval| (Query::new(eval.poly(), eval.rotation()), None))
-            .collect();
-        for (poly, comm) in rotate_poly_comms_map
-            .iter_mut()
-            .zip(rotate_polys_comms.iter())
-        {
-            *poly.1 = Some(comm)
-        }
-
-        let ell = evals.len().next_power_of_two().ilog2() as usize;
-        let t = transcript.squeeze_challenges(ell);
-
-        let eq_xt = MultilinearPolynomial::eq_xy(&t);
-
-        // let evals_cur = evals
-        //     .iter()
-        //     .filter(|eval| eval.rotation() == Rotation::cur())
-        //     .collect_vec();
-
-        let tilde_gs_sum =
-            inner_product(evals.iter().map(|eval| eval.value()), &eq_xt[..evals.len()]);
-
-        let commitment_cur = {
-            let scalars = evals
-                .iter()
-                .zip(eq_xt.evals())
-                .map(|(eval, eq_xt_i)| *eq_xt_i) // Dereference eq_xt_i
-                .collect_vec();
-            let bases = evals.iter().map(|eval| {
-                if eval.rotation() != Rotation::cur() {
-                    rotate_poly_comms_map[&Query::new(eval.poly(), eval.rotation())].unwrap()
-                } else {
-                    comms[eval.poly()]
-                }
-            });
-            Pcs::Commitment::msm(&scalars, bases)
-        };
-        Pcs::verify(vp, &commitment_cur, &points[0], &tilde_gs_sum, transcript)
-
-        // --- Part 2: verify rotation eval ---
-        // let eval_rotations = evals
-        //     .iter()
-        //     .filter(|eval| eval.rotation() != Rotation::cur())
-        //     .collect_vec();
-        //
-        // if !eval_rotations.is_empty() {
-        //     // group by rotation
-        //     let mut evals_by_rotation: HashMap<Rotation, Vec<&evaluation_for_shift<F>>> =
-        //         HashMap::new();
-        //     for eval in eval_rotations {
-        //         evals_by_rotation
-        //             .entry(eval.rotation())
-        //             .or_default()
-        //             .push(eval);
-        //     }
-        //
-        //     for (rotation, rotation_evals) in evals_by_rotation {
-        //         let num_rotated = rotation_evals.len();
-        //
-        //         let ell_rotated = if num_rotated == 1 {
-        //             2
-        //         } else {
-        //             num_rotated.next_power_of_two().ilog2() as usize
-        //         };
-        //
-        //         let challenges_rotated_combine = transcript.squeeze_challenges(ell_rotated);
-        //         let eq_xt_rotated = MultilinearPolynomial::eq_xy(&challenges_rotated_combine);
-        //
-        //         // eval the merge evals
-        //         let merged_value = inner_product(
-        //             rotation_evals.iter().map(|eval| eval.value()), // input &F
-        //             eq_xt_rotated.evals()[..num_rotated].iter(),    // need F
-        //         );
-        //         // Note: if prover has made scalar(multiple merged_scalar) to 'value' before `prove_shifted_evaluation`
-        //         // verifier also need do so at calculating merged_value, but it is hard.
-        //         // due to it is not easy to get merged_scalar. better way is prover give un-scalared poly and value
-        //         // suppose prover give the final value(scalared)
-        //
-        //         // merge commitment
-        //         let merged_comm_rotated = {
-        //             let scalars = eq_xt_rotated.evals()[..num_rotated].to_vec();
-        //             let bases = rotation_evals.iter().map(|eval| comms[eval.poly()]);
-        //             Pcs::Commitment::msm(&scalars, bases)
-        //         };
-        //
-        //         // call specific Pcs shift function
-        //         Pcs::verify_shifted_evaluation(
-        //             vp,
-        //             &merged_comm_rotated, // commit to merged f
-        //             &points[0],           // evals u
-        //             &merged_value,        // v = f_d(u)
-        //             &rotation,            // rotation
-        //             transcript,           // transcript with proof data
-        //         )?;
-        //     }
-        // }
     }
 }

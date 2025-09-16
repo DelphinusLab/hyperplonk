@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::util::{
     arithmetic::PrimeField,
     chain,
@@ -242,6 +243,7 @@ pub(crate) struct Product<F> {
     foldees: Vec<Expression<F>>,
 }
 
+#[allow(dead_code)]
 impl<F> Product<F> {
     fn new(preprocess: Expression<F>, foldees: Vec<Expression<F>>) -> Self {
         Self {
@@ -262,6 +264,7 @@ impl<F> Product<F> {
     }
 }
 
+#[allow(dead_code)]
 fn folding_degree<F: PrimeField>(products: &[Product<F>]) -> usize {
     products
         .iter()

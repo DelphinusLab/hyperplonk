@@ -99,7 +99,6 @@ pub trait InMemoryTranscript {
     fn from_proof(param: Self::Param, proof: &[u8]) -> Self;
 }
 
-//Keccak256Transcript<S> 是确定了H为Kecc256的FiatShamirTranscript
 pub type Keccak256Transcript<S> = FiatShamirTranscript<Keccak256, S>;
 
 #[derive(Debug, Default)]
@@ -108,7 +107,6 @@ pub struct FiatShamirTranscript<H, S> {
     stream: S,
 }
 
-//如果引入了InMemoryTranscript,调用了from_proof/into_proof接口，默认就是采用了Cursor<Vec<u8>>作为S
 impl<H: Hash> InMemoryTranscript for FiatShamirTranscript<H, Cursor<Vec<u8>>> {
     type Param = ();
 
@@ -162,7 +160,7 @@ impl<H: Hash, F: PrimeField, R: io::Read> FieldTranscriptRead<F> for FiatShamirT
 impl<H: Hash, F: PrimeField, W: io::Write> FieldTranscriptWrite<F> for FiatShamirTranscript<H, W> {
     fn write_field_element(&mut self, fe: &F) -> Result<(), Error> {
         self.common_field_element(fe)?;
-        let mut repr = fe.to_repr();
+        let repr = fe.to_repr();
         // repr.as_mut().reverse();
         self.stream
             .write_all(repr.as_ref())
@@ -222,7 +220,7 @@ macro_rules! impl_fs_transcript_curve_commitment {
                     self.common_commitment(ec_point)?;
                     let coordinates = ec_point.coordinates().unwrap();
                     for coordinate in [coordinates.x(), coordinates.y()] {
-                        let mut repr = coordinate.to_repr();
+                        let repr = coordinate.to_repr();
                         // repr.as_mut().reverse();
                         self.stream
                             .write_all(repr.as_ref())
@@ -235,12 +233,8 @@ macro_rules! impl_fs_transcript_curve_commitment {
     };
 }
 
-//这里是trait<C,F>泛型的静态分发，也就是trait也支持泛型，不同泛型对应不同trait_C_F类型,和结构体支持泛型类似，只不过这里是trait泛型
-//这里实现了Transcript的bn256的泛型支持
-//同时，这里实现了对所有FiatShamirTranscript<H,S>的几个Transcript的bn256的支持，同样，也包括了Keccak256Transcript<S>
 impl_fs_transcript_curve_commitment!(bn256::G1Affine,);
 
-//这里的Transcript的C是Output<Keccak256>, 和bn256::G1Affine不同
 impl<F: PrimeField, S> Transcript<Output<Keccak256>, F> for Keccak256Transcript<S> {
     fn common_commitment(&mut self, comm: &Output<Keccak256>) -> Result<(), Error> {
         self.state.update(comm);
@@ -254,14 +248,12 @@ impl<F: PrimeField, R: io::Read> TranscriptRead<Output<Keccak256>, F> for Keccak
         self.stream
             .read_exact(hash.as_mut())
             .map_err(|err| Error::Transcript(err.kind(), err.to_string()))?;
-        //这里没有state.update，需要手动调用common_commitment()才能更新transcript
         Ok(hash)
     }
 }
 
 impl<F: PrimeField, W: io::Write> TranscriptWrite<Output<Keccak256>, F> for Keccak256Transcript<W> {
     fn write_commitment(&mut self, hash: &Output<Keccak256>) -> Result<(), Error> {
-        //这里没有state.update，需要手动调用common_commitment()才能更新transcript
         self.stream
             .write_all(hash)
             .map_err(|err| Error::Transcript(err.kind(), err.to_string()))?;

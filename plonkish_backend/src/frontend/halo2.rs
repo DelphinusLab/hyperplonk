@@ -124,7 +124,7 @@ pub fn get_circuit_info<E: MultiMillerLoop, T: Circuit<E::Scalar>>(
 
     circuit_info.preprocess_polys = fixed.into_iter().map(|poly| poly.values).collect();
     circuit_info.permutations = permutation;
-    println!("circuit_info={:?}",circuit_info);
+    println!("circuit_info={:?}", circuit_info);
     Ok(circuit_info)
 }
 
@@ -134,7 +134,6 @@ impl<'a, E: MultiMillerLoop, C: Circuit<E::Scalar>> PlonkishCircuit<E::Scalar>
     fn circuit_info(&self) -> Result<PlonkishCircuitInfo<E::Scalar>, crate::Error> {
         let Self {
             k,
-            config,
             circuit,
             row_mapping,
             cs,

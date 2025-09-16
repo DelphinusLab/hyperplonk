@@ -162,7 +162,7 @@ fn variable_base_msm_serial<C: CurveAffine>(
             bases.is_empty(),
             "variable_base_msm_serial: bases must be empty if scalars is empty"
         );
-        let mut result = C::Curve::identity();
+        let result = C::Curve::identity();
         return result;
     }
 

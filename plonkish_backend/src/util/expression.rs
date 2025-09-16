@@ -4,7 +4,6 @@ use crate::util::{
 use halo2_proofs::helpers::read_u32;
 use halo2_proofs::helpers::Serializable;
 use num;
-use num::FromPrimitive;
 use num_derive::FromPrimitive;
 use std::{
     borrow::Borrow,
@@ -16,7 +15,7 @@ use std::{
 };
 
 pub mod evaluator;
-pub mod relaxed;
+
 pub mod rotate;
 
 pub use rotate::Rotatable;

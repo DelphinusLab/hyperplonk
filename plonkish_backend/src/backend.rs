@@ -49,8 +49,6 @@ pub trait PlonkishBackend<C: CurveAffine>: Clone + Debug {
         pp: &Self::ProverParam,
         circuit: &impl PlonkishCircuit<C::ScalarExt>,
         transcript: &mut impl TranscriptWrite<CommitmentChunk<C::ScalarExt, Self::Pcs>, C::ScalarExt>,
-        // transcript: &mut impl TranscriptWrite<CommitmentChunk<C::ScalarExt, Self::Pcs>, C::ScalarExt>,
-        rng: impl RngCore,
     ) -> Result<(), Error>;
 
     fn verify(
@@ -58,30 +56,7 @@ pub trait PlonkishBackend<C: CurveAffine>: Clone + Debug {
         vp: &Self::VerifierParam,
         instances: &[Vec<C::ScalarExt>],
         transcript: &mut impl TranscriptRead<CommitmentChunk<C::ScalarExt, Self::Pcs>, C::ScalarExt>,
-        rng: impl RngCore,
     ) -> Result<(), Error>;
-
-    fn prove_with_shift(
-        _ps: &Self::ProverSetupParam,
-        _pp: &Self::ProverParam,
-        _circuit: &impl PlonkishCircuit<C::ScalarExt>,
-        _transcript: &mut impl TranscriptWrite<CommitmentChunk<C::ScalarExt, Self::Pcs>, C::ScalarExt>,
-    ) -> Result<(), Error> {
-        Err(Error::NotImplemented(
-            "prove_with_shift not implemented".to_string(),
-        ))
-    }
-
-    fn verify_with_shift(
-        _vs: &Self::VerifierSetupParam,
-        _vp: &Self::VerifierParam,
-        _instances: &[Vec<C::ScalarExt>],
-        _transcript: &mut impl TranscriptRead<CommitmentChunk<C::ScalarExt, Self::Pcs>, C::ScalarExt>,
-    ) -> Result<(), Error> {
-        Err(Error::NotImplemented(
-            "verify_with_shift not implemented".to_string(),
-        ))
-    }
 }
 
 #[derive(Clone, Debug)]
@@ -126,12 +101,6 @@ impl<F: Clone> PlonkishCircuitInfo<F> {
         .collect::<BTreeSet<_>>();
         let challenges = chain![self.expressions().flat_map(Expression::used_challenge)]
             .collect::<BTreeSet<_>>();
-        // Same amount of phases
-        // self.num_witness_polys.len() == self.num_challenges.len()
-        //     // Every phase has some witness polys
-        //     && !self.num_witness_polys.iter().any(|n| *n == 0)
-        //     // Every phase except the last one has some challenges after the witness polys are committed
-        //     && !self.num_challenges[..self.num_challenges.len() - 1].iter().any(|n| *n == 0)
         // Polynomial indices are in range
         self.num_witness_polys>0
             &&(polys.is_empty() || *polys.last().unwrap() < num_poly)
@@ -172,8 +141,6 @@ impl<F: Clone> PlonkishCircuitInfo<F> {
 }
 
 pub trait PlonkishCircuit<F> {
-    // fn circuit_info_without_preprocess(k:usize,cs:&ConstraintSystem<F>) -> PlonkishCircuitInfo<F>;
-
     fn circuit_info(&self) -> Result<PlonkishCircuitInfo<F>, Error>;
 
     fn instances(&self) -> &[Vec<F>];
