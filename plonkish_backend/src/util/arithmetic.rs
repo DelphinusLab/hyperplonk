@@ -13,7 +13,7 @@ pub use group::{
     Curve, Group, GroupOpsOwned, ScalarMulOwned,
 };
 pub use halo2_proofs::arithmetic::{
-    Coordinates, CurveAffine, CurveExt, FieldExt, Group as Pairing_Group, MillerLoopResult,
+    BaseExt, Coordinates, CurveAffine, CurveExt, FieldExt, Group as Pairing_Group, MillerLoopResult,
 };
 pub use msm::{fixed_base_msm, variable_base_msm, window_size, window_table, Msm};
 

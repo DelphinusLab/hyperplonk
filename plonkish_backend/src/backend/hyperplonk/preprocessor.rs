@@ -1,26 +1,34 @@
 use crate::{
     backend::{
-        hyperplonk::{HyperPlonkProverParam, HyperPlonkVerifierParam},
+        hyperplonk::{
+            HyperPlonkProverParam, HyperPlonkProverSetupParam, HyperPlonkVerifierParam,
+            HyperPlonkVerifierSetupParam,
+        },
         PlonkishCircuitInfo,
     },
     pcs::PolynomialCommitmentScheme,
     poly::multilinear::MultilinearPolynomial,
     util::{
-        arithmetic::{div_ceil, steps, PrimeField},
+        arithmetic::{div_ceil, steps, CurveAffine, FieldExt, PrimeField},
         chain,
         expression::{Expression, Query, Rotation},
         Itertools,
     },
     Error,
 };
+use halo2_proofs::plonk::circuit::ConstraintSystem;
+use halo2_proofs::plonk::permutation;
+use halo2_proofs::plonk::VerifyingKey;
+use halo2_proofs::poly::domain::EvaluationDomain;
 use std::{array, borrow::Cow, mem};
 
 pub(crate) fn batch_size<F: PrimeField>(circuit_info: &PlonkishCircuitInfo<F>) -> usize {
     let num_lookups = circuit_info.lookups.len();
     let num_permutation_polys = circuit_info.permutation_polys().len();
     chain![
-        [circuit_info.preprocess_polys.len() + circuit_info.permutation_polys().len()],
-        circuit_info.num_witness_polys.clone(),
+        [circuit_info.preprocess_polys.len()
+            + circuit_info.permutation_polys().len()
+            + circuit_info.num_witness_polys],
         [num_lookups],
         [num_lookups + div_ceil(num_permutation_polys, max_degree(circuit_info, None) - 1)],
     ]
@@ -28,17 +36,29 @@ pub(crate) fn batch_size<F: PrimeField>(circuit_info: &PlonkishCircuitInfo<F>) -
 }
 
 #[allow(clippy::type_complexity)]
-pub(crate) fn preprocess<F: PrimeField, Pcs: PolynomialCommitmentScheme<F>>(
+pub(crate) fn preprocess<
+    C: CurveAffine,
+    Pcs: PolynomialCommitmentScheme<C::ScalarExt, CommitmentChunk = C>,
+>(
     param: &Pcs::Param,
-    circuit_info: &PlonkishCircuitInfo<F>,
+    circuit_info: &PlonkishCircuitInfo<C::ScalarExt>,
     batch_commit: impl Fn(
         &Pcs::ProverParam,
-        Vec<MultilinearPolynomial<F>>,
-    ) -> Result<(Vec<MultilinearPolynomial<F>>, Vec<Pcs::Commitment>), Error>,
+        Vec<MultilinearPolynomial<C::ScalarExt>>,
+    ) -> Result<
+        (
+            Vec<MultilinearPolynomial<C::ScalarExt>>,
+            Vec<Pcs::Commitment>,
+        ),
+        Error,
+    >,
 ) -> Result<
     (
-        HyperPlonkProverParam<F, Pcs>,
-        HyperPlonkVerifierParam<F, Pcs>,
+        HyperPlonkProverParam<C>,
+        HyperPlonkVerifierParam<C>,
+        HyperPlonkProverSetupParam<C::ScalarExt, Pcs>,
+        HyperPlonkVerifierSetupParam<C::ScalarExt, Pcs>,
+        // VerifyingKey<C>
     ),
     Error,
 > {
@@ -68,27 +88,31 @@ pub(crate) fn preprocess<F: PrimeField, Pcs: PolynomialCommitmentScheme<F>>(
 
     // Compose expression
     let (num_permutation_z_polys, expression) = compose(circuit_info);
-    let vp = HyperPlonkVerifierParam {
-        pcs: pcs_vp,
-        num_instances: circuit_info.num_instances.clone(),
-        num_witness_polys: circuit_info.num_witness_polys.clone(),
-        num_challenges: circuit_info.num_challenges.clone(),
+
+    let preprocess_comms = preprocess_comms
+        .iter()
+        .map(|c: &Pcs::Commitment| c.as_ref()[0])
+        .collect::<Vec<_>>();
+
+    let permutation_comms = permutation_comms
+        .iter()
+        .map(|c: &Pcs::Commitment| c.as_ref()[0])
+        .collect::<Vec<_>>();
+    println!("permutation_comms={:?}",permutation_comms);
+    let vp = HyperPlonkVerifierParam::<C> {
+        num_instances: circuit_info.num_instances,
+        num_witness_polys: circuit_info.num_witness_polys,
         num_lookups: circuit_info.lookups.len(),
         num_permutation_z_polys,
         num_vars,
         expression: expression.clone(),
+        named_advices: circuit_info.named_witnesses.clone(),
         preprocess_comms: preprocess_comms.clone(),
-        permutation_comms: circuit_info
-            .permutation_polys()
-            .into_iter()
-            .zip(permutation_comms.clone())
-            .collect(),
+        permutation_comms: permutation_comms.clone(),
     };
-    let pp = HyperPlonkProverParam {
-        pcs: pcs_pp,
-        num_instances: circuit_info.num_instances.clone(),
-        num_witness_polys: circuit_info.num_witness_polys.clone(),
-        num_challenges: circuit_info.num_challenges.clone(),
+    let pp = HyperPlonkProverParam::<C> {
+        num_instances: circuit_info.num_instances,
+        num_witness_polys: circuit_info.num_witness_polys,
         lookups: circuit_info.lookups.clone(),
         num_permutation_z_polys,
         num_vars,
@@ -102,15 +126,27 @@ pub(crate) fn preprocess<F: PrimeField, Pcs: PolynomialCommitmentScheme<F>>(
             .collect(),
         permutation_comms,
     };
-    Ok((pp, vp))
+    let ps = HyperPlonkProverSetupParam { pcs: pcs_pp };
+    let vs = HyperPlonkVerifierSetupParam { pcs: pcs_vp };
+
+    // let domain = EvaluationDomain::new(1,2);
+    // let commitments = permutation_comms.iter().map(|c:&Pcs::Commitment|c.as_ref()[0]).collect::<Vec<_>>();
+    // let permutation = permutation::VerifyingKey{commitments};
+    // let vk = VerifyingKey{
+    //     domain,
+    //     fixed_commitments:vp.preprocess_comms.iter().map(|c:&Pcs::Commitment|c.as_ref()[0]).collect::<Vec<_>>(),
+    //     permutation,
+    //     cs:ConstraintSystem::default()
+    // };
+    // Ok((pp, vp,ps,vs,vk))
+    Ok((pp, vp, ps, vs))
 }
 
-pub(crate) fn compose<F: PrimeField>(
+pub(crate) fn compose<F: FieldExt>(
     circuit_info: &PlonkishCircuitInfo<F>,
 ) -> (usize, Expression<F>) {
-    let challenge_offset = circuit_info.num_challenges.iter().sum::<usize>();
-    let [beta, gamma, alpha] =
-        &array::from_fn(|idx| Expression::<F>::Challenge(challenge_offset + idx));
+    // let challenge_offset = circuit_info.num_challenges.iter().sum::<usize>();
+    let [beta, gamma, alpha] = &array::from_fn(|idx| Expression::<F>::Challenge(idx));
 
     let (lookup_constraints, lookup_zero_checks) = lookup_constraints(circuit_info, beta, gamma);
 
@@ -263,7 +299,7 @@ pub(crate) fn permutation_polys<F: PrimeField>(
         }
         poly_index
     };
-    //here is idx instead of omega of halo2
+    //here is idx instead of omega in halo2
     let mut permutations = (0..permutation_polys.len() as u64)
         .map(|idx| {
             steps(F::from(idx << num_vars))
@@ -271,7 +307,7 @@ pub(crate) fn permutation_polys<F: PrimeField>(
                 .collect_vec()
         })
         .collect_vec();
-    //actually cycle has set unify global index by hyper-plonk, here just adapt to column
+    //actually cycle(i,j)(column,row)'s column has set to global index by hyper-plonk, here just adapt to permute poly column
     for cycle in cycles.iter() {
         let (i0, j0) = cycle[0];
         let mut last = permutations[poly_index[i0]][j0];

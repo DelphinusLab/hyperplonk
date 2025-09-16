@@ -1,11 +1,12 @@
 use crate::{
     pcs::{
+        evaluation_for_shift,
         multilinear::{additive, quotients},
         univariate::{
             err_too_large_deree, UnivariateKzg, UnivariateKzgProverParam,
             UnivariateKzgVerifierParam,
         },
-        Evaluation, Evaluation_for_shift, Point, PolynomialCommitmentScheme,
+        Evaluation, Point, PolynomialCommitmentScheme,
     },
     poly::{
         multilinear::{rotation_eval, MultilinearPolynomial},
@@ -14,16 +15,17 @@ use crate::{
     util::{
         arithmetic::{
             powers, squares, variable_base_msm, BatchInvert, Curve, Field, MultiMillerLoop,
+            PrimeCurveAffine,
         },
         chain, izip,
         parallel::parallelize,
         transcript::{TranscriptRead, TranscriptWrite},
-        Deserialize, DeserializeOwned, Itertools, Serialize,start_timer,end_timer
+        Deserialize, DeserializeOwned, Itertools, Serialize,
     },
     Error,
 };
 use rand::RngCore;
-use std::{marker::PhantomData, process::exit};
+use std::marker::PhantomData;
 
 #[derive(Clone, Debug)]
 pub struct Zeromorph<Pcs>(PhantomData<Pcs>);
@@ -55,6 +57,9 @@ pub struct ZeromorphKzgVerifierParam<M: MultiMillerLoop> {
 }
 
 impl<M: MultiMillerLoop> ZeromorphKzgVerifierParam<M> {
+    pub fn new(vp: UnivariateKzgVerifierParam<M>, s_offset_g2: M::G2Affine) -> Self {
+        Self { vp, s_offset_g2 }
+    }
     pub fn g1(&self) -> M::G1Affine {
         self.vp.g1()
     }
@@ -67,6 +72,14 @@ impl<M: MultiMillerLoop> ZeromorphKzgVerifierParam<M> {
         self.vp.s_g2()
     }
 }
+
+// impl<M>  Zeromorph<UnivariateKzg<M>>
+//     where
+//         M: MultiMillerLoop
+// {
+//     pub fn
+//
+// }
 
 impl<M> PolynomialCommitmentScheme<M::Scalar> for Zeromorph<UnivariateKzg<M>>
 where
@@ -85,8 +98,31 @@ where
 
     fn setup(poly_size: usize, batch_size: usize, rng: impl RngCore) -> Result<Self::Param, Error> {
         assert!(poly_size.is_power_of_two());
-        UnivariateKzg::<M>::setup((poly_size + 1).next_power_of_two(), batch_size, rng)
+        UnivariateKzg::<M>::setup((poly_size + 0).next_power_of_two(), batch_size, rng)
     }
+
+    // fn trim(
+    //     param: &Self::Param,
+    //     poly_size: usize,
+    //     batch_size: usize,
+    // ) -> Result<(Self::ProverParam, Self::VerifierParam), Error> {
+    //     assert!(poly_size.is_power_of_two());
+    //     println!("poly_size={},batch_size={}",poly_size,batch_size);
+    //     let (commit_pp, vp) =
+    //         UnivariateKzg::<M>::trim(param, (poly_size + 1).next_power_of_two(), batch_size)?;
+    //     let offset = param.monomial_g1().len() - (poly_size + 1).next_power_of_two();
+    //     println!("poly_size={},offset={}",poly_size,offset);
+    //     let open_pp = {
+    //         let monomial_g1 = param.monomial_g1()[offset..].to_vec();
+    //         UnivariateKzgProverParam::new((poly_size.ilog2() + 1) as usize, monomial_g1, Vec::new())
+    //     };
+    //     let s_offset_g2 = param.powers_of_s_g2()[offset];
+    //
+    //     Ok((
+    //         ZeromorphKzgProverParam { commit_pp, open_pp },
+    //         ZeromorphKzgVerifierParam { vp, s_offset_g2 },
+    //     ))
+    // }
 
     fn trim(
         param: &Self::Param,
@@ -94,13 +130,12 @@ where
         batch_size: usize,
     ) -> Result<(Self::ProverParam, Self::VerifierParam), Error> {
         assert!(poly_size.is_power_of_two());
-
         let (commit_pp, vp) =
-            UnivariateKzg::<M>::trim(param, (poly_size + 1).next_power_of_two(), batch_size)?;
-        let offset = param.monomial_g1().len() - (poly_size + 1).next_power_of_two();
+            UnivariateKzg::<M>::trim(param, (poly_size + 0).next_power_of_two(), batch_size)?;
+        let offset = param.monomial_g1().len() - (poly_size + 0).next_power_of_two();
         let open_pp = {
             let monomial_g1 = param.monomial_g1()[offset..].to_vec();
-            UnivariateKzgProverParam::new((poly_size.ilog2() + 1) as usize, monomial_g1, Vec::new())
+            UnivariateKzgProverParam::new((poly_size.ilog2() + 0) as usize, monomial_g1, Vec::new())
         };
         let s_offset_g2 = param.powers_of_s_g2()[offset];
 
@@ -149,10 +184,10 @@ where
             assert_eq!(poly.evaluate(point), *eval);
         }
 
-        // point.len() == poly.num_vars()
         let (quotients, remainder) =
             quotients(poly, point, |_, q| UnivariatePolynomial::monomial(q));
-        UnivariateKzg::batch_commit_and_write(&pp.commit_pp, &quotients, transcript)?;
+        let quotiens = UnivariateKzg::batch_commit_and_write(&pp.commit_pp, &quotients, transcript)?;
+
 
         if cfg!(feature = "sanity-check") {
             assert_eq!(&remainder, eval);
@@ -172,10 +207,12 @@ where
             UnivariatePolynomial::monomial(q_hat)
         };
         // println!("UnivariateKzg::commit_and_write(&pp.commit_pp, &q_hat, transcript)?;");
-        UnivariateKzg::commit_and_write(&pp.commit_pp, &q_hat, transcript)?;
+        let g_hat_commit = UnivariateKzg::commit_and_write(&pp.commit_pp, &q_hat, transcript)?;
+        println!("prove.g_hat_commit={:?}",g_hat_commit);
 
         let x = transcript.squeeze_challenge();
         let z = transcript.squeeze_challenge();
+        println!("prove.z={:?}",z);
 
         let (eval_scalar, q_scalars) = eval_and_quotient_scalars(y, x, z, point);
 
@@ -193,7 +230,7 @@ where
         } else {
             Default::default()
         };
-
+        println!("prove.comm_f={:?}",comm);
         UnivariateKzg::<M>::open(&pp.open_pp, &f, &comm, &x, &M::Scalar::zero(), transcript)
     }
 
@@ -219,7 +256,7 @@ where
         polys: impl IntoIterator<Item = &'a Self::Polynomial>,
         comms: impl IntoIterator<Item = &'a Self::Commitment>,
         points: &[Point<M::Scalar, Self::Polynomial>],
-        evals: &[Evaluation_for_shift<M::Scalar>],
+        evals: &[evaluation_for_shift<M::Scalar>],
         transcript: &mut impl TranscriptWrite<Self::CommitmentChunk, M::Scalar>,
     ) -> Result<(), Error>
     where
@@ -369,7 +406,7 @@ where
         izip!(&quotients_d, &q_scalars).for_each(|(q, scalar)| term3_inner += &(q * *scalar));
 
         // calc F_d by rotation
-        let F_d = if signed_d > 0 {
+        let f_d = if signed_d > 0 {
             // left shift d = abs_d
             // P_Ad: construct by previous d coeffs of f
             let p_ad = crate::poly::univariate::UnivariatePolynomial::monomial(
@@ -392,10 +429,10 @@ where
             term1 += &(&p_ad * &x_n);
 
             // F_d = z * Term1 + X^d * q_d_hat + X^d * term3_inner
-            let mut F_d = &term1 * z;
-            F_d += &(&x_d * &q_d_hat);
-            F_d += &(&x_d * &term3_inner);
-            F_d
+            let mut f_d = &term1 * z;
+            f_d += &(&x_d * &q_d_hat);
+            f_d += &(&x_d * &term3_inner);
+            f_d
         } else {
             // right shift d' = abs_d = -signed_d
             // P_Ad: construct by post d' coeffs of f
@@ -419,24 +456,24 @@ where
             term1 += &(&p_ad * &x_n);
 
             // F_d = z * Term1 + q_d_hat + term3_inner
-            let mut F_d = &term1 * z;
-            F_d += &q_d_hat;
-            F_d += &term3_inner;
-            F_d
+            let mut f_d = &term1 * z;
+            f_d += &q_d_hat;
+            f_d += &term3_inner;
+            f_d
         };
 
-        UnivariateKzg::commit_and_write(&pp.commit_pp, &F_d, transcript)?;
+        UnivariateKzg::commit_and_write(&pp.commit_pp, &f_d, transcript)?;
 
         let comm = if cfg!(feature = "sanity-check") {
-            assert_eq!(F_d.evaluate(&x), M::Scalar::zero());
-            UnivariateKzg::commit_monomial(&pp.open_pp, F_d.coeffs())
+            assert_eq!(f_d.evaluate(&x), M::Scalar::zero());
+            UnivariateKzg::commit_monomial(&pp.open_pp, f_d.coeffs())
         } else {
             Default::default()
         };
 
         UnivariateKzg::<M>::open(
             &pp.open_pp,
-            &F_d,
+            &f_d,
             &comm,
             &x,
             &M::Scalar::zero(), // claimed zero
@@ -454,21 +491,23 @@ where
         let num_vars = point.len();
 
         let q_comms = transcript.read_commitments(num_vars)?;
-
+        println!("verify.q_comms={:?}",q_comms);
         let y = transcript.squeeze_challenge();
 
         let q_hat_comm = transcript.read_commitment()?;
-
+        println!("verify.q_hat_comm={:?}",q_hat_comm);
         let x = transcript.squeeze_challenge();
         let z = transcript.squeeze_challenge();
-
+        println!("verify.z={:?}",z);
         let (eval_scalar, q_scalars) = eval_and_quotient_scalars(y, x, z, point);
         let pi = transcript.read_commitment()?;
-
-        let scalars = chain![[M::Scalar::one(), z, eval_scalar * eval,x], q_scalars].collect_vec();
-        let bases = chain![[q_hat_comm, comm.0, vp.g1(),pi], q_comms].collect_vec();
+        println!("verify.pi={:?}",pi);
+        let scalars = chain![[M::Scalar::one(), z, eval_scalar * eval, x], q_scalars].collect_vec();
+        let bases = chain![[q_hat_comm, comm.0, vp.g1(), pi], q_comms].collect_vec();
+        // let scalars = chain![[M::Scalar::one(), z, eval_scalar * eval, ], q_scalars].collect_vec();
+        // let bases = chain![[q_hat_comm, comm.0, vp.g1(), ], q_comms].collect_vec();
         let c: M::G1Affine = variable_base_msm(&scalars, &bases).into();
-
+        println!("verify.final.f={:?}",c);
         // let c= transcript.read_commitment()?;
 
         M::pairings_product_is_identity(&[
@@ -505,10 +544,7 @@ where
         let z = transcript.squeeze_challenge();
         let (eval_scalar, q_scalars) = eval_and_quotient_scalars(y, x, z, point);
 
-        // println!("eval_scalar: {:?}", eval_scalar);
-        // println!("q_scalars: {:?}", q_scalars);
-
-        //    f_check = q_d_hat + z*f + eval_scalar*v*1 + sum(q_scalar_k * q_{d,k})
+        // f_check = q_d_hat + z*f + eval_scalar*v*1 + sum(q_scalar_k * q_{d,k})
         let scalars = chain![[M::Scalar::one(), z, eval_scalar * value], q_scalars].collect_vec();
         let bases = chain![
             [q_d_hat_comm.0, comm.0, vp.g1()], // Use .0 for comms, vp.g1() is already G1Affine
@@ -516,31 +552,29 @@ where
         ]
         .collect_vec();
 
-        let reconstructed_commitment_c: M::G1Affine = variable_base_msm(&scalars, &bases).into();
+        // let reconstructed_commitment_c: M::G1Affine = variable_base_msm(&scalars, &bases).into();
 
-        let F_d = transcript.read_commitment()?;
+        let f_d = transcript.read_commitment()?;
 
         // 5. read final univariate KZG open proof which generated from UnivariateKzg::open
         let pi_d = transcript.read_commitment()?;
 
         // 6. final pairing check
         M::pairings_product_is_identity(&[
-            (&F_d, &(-vp.s_offset_g2).into()),
+            (&f_d, &(-vp.s_offset_g2).into()),
             (
                 &pi_d,
                 &(vp.s_g2() - (vp.g2() * x).into()).to_affine().into(),
             ),
-        ]);
-        Ok(())
-        // .then_some(())
-        // .ok_or_else(|| {
-        //     println!("F_d: {:?}", F_d);
-        //     println!("pi_d: {:?}", pi_d);
-        //     Error::InvalidPcsOpen(format!(
-        //         "Invalid Zeromorph KZG shifted open for rotation {}", rotation.0))} // 使用 rotation.0 获取带符号距
-        // )
+        ])
+        .then_some(())
+        .ok_or_else(|| {
+            println!("F_d: {:?}", F_d);
+            println!("pi_d: {:?}", pi_d);
+            Error::InvalidPcsOpen(format!(
+                "Invalid Zeromorph KZG shifted open for rotation {}", rotation.0))} // 使用 rotation.0 获取带符号距
+        )
 
-        // Ok(())
     }
 
     fn batch_verify<'a>(
@@ -559,7 +593,7 @@ where
         vp: &Self::VerifierParam,
         comms: impl IntoIterator<Item = &'a Self::Commitment>,
         points: &[Point<M::Scalar, Self::Polynomial>],
-        evals: &[Evaluation_for_shift<M::Scalar>],
+        evals: &[evaluation_for_shift<M::Scalar>],
         transcript: &mut impl TranscriptRead<Self::CommitmentChunk, M::Scalar>,
     ) -> Result<(), Error> {
         let num_vars = points.first().map(|point| point.len()).unwrap_or_default();

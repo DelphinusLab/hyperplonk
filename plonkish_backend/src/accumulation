@@ -11,8 +11,7 @@ use crate::{
 use rand::RngCore;
 use std::{borrow::BorrowMut, fmt::Debug};
 
-pub mod protostar;
-pub mod sangria;
+
 
 pub trait AccumulationScheme<F: Field>: Clone + Debug {
     type Pcs: PolynomialCommitmentScheme<F>;

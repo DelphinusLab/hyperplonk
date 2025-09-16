@@ -1,32 +1,37 @@
+use crate::backend::WitnessEncoding;
+use crate::util::expression::rotate::{Lexical, Rotatable};
 use halo2_proofs::{
     arithmetic::MultiMillerLoop,
-    plonk::{Circuit as ZkCircuit, ConstraintSystem as ZkConstraintSystem},
+    plonk::{Circuit, ConstraintSystem},
 };
 
-use crate::backend::WitnessEncoding;
-
 #[derive(Debug)]
-pub struct ZKWASMCircuit<'a, E: MultiMillerLoop, C: ZkCircuit<E::Scalar>> {
+pub struct ZKWASMCircuit<'a, E: MultiMillerLoop, C: Circuit<E::Scalar>> {
     pub circuit: &'a C,
     pub config: C::Config,
-    pub cs: ZkConstraintSystem<E::Scalar>,
+    pub cs: ConstraintSystem<E::Scalar>,
     pub k: u32,
     pub instances: Vec<Vec<E::Scalar>>,
     pub instances_scalar: Vec<Vec<E::Scalar>>,
     pub row_mapping: Vec<usize>,
 }
 
-pub fn get_zkwasm_circuit<D: WitnessEncoding, E: MultiMillerLoop, T>(
+
+pub fn get_zkwasm_circuit<E: MultiMillerLoop, T>(
     k: u32,
-    circuit: &[T],
-    _instances: Vec<E::Scalar>,
+    circuit: &T,
+    instances: Vec<Vec<E::Scalar>>,
 ) -> ZKWASMCircuit<E, T>
 where
-    T: ZkCircuit<E::Scalar>,
+    T: Circuit<E::Scalar>,
 {
-    let circuit = &circuit[0];
-    let cs = ZkConstraintSystem::default();
+    let cs = ConstraintSystem::default();
     let (config, cs) = cs.circuit_configure::<T>();
+    // let (instances, instances_scalar) = if instances.len() > 0 {
+    //     (vec![instances.clone()], vec![instances])
+    // } else {
+    //     (vec![], vec![])
+    // };
 
     // Convert Gate Constraints.
     ZKWASMCircuit {
@@ -34,12 +39,8 @@ where
         config,
         cs,
         k,
-        //for zkwasm
-        // instances: vec![instances.clone()],
-        // instances_scalar: vec![instances],
-        //for zkwasm-host
-        instances: vec![],
-        instances_scalar: vec![],
-        row_mapping: D::row_mapping(k as usize),
+        instances:instances.clone(),
+        instances_scalar:instances,
+        row_mapping: Lexical::new(k as usize).usable_indices(),
     }
 }

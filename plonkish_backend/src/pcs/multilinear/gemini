@@ -28,7 +28,7 @@ pub struct Gemini<Pcs>(PhantomData<Pcs>);
 impl<M> PolynomialCommitmentScheme<M::Scalar> for Gemini<UnivariateKzg<M>>
 where
     M: MultiMillerLoop,
-    M::Scalar: Serialize + DeserializeOwned,
+    M::Scalar,
     M::G1Affine: Serialize + DeserializeOwned,
     M::G2Affine: Serialize + DeserializeOwned,
 {

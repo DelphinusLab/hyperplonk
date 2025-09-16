@@ -1,5 +1,5 @@
 use crate::{
-    pcs::{Evaluation, Evaluation_for_shift},
+    pcs::{evaluation_for_shift, Evaluation},
     piop::sum_check::{
         classic::{ClassicSumCheck, EvaluationsProver},
         evaluate, lagrange_eval, SumCheck,
@@ -17,8 +17,6 @@ use crate::{
     Error,
 };
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::fs::OpenOptions;
-use std::io::Write;
 
 #[allow(clippy::type_complexity)]
 pub(super) fn verify_zero_check<F: PrimeField>(
@@ -50,7 +48,7 @@ pub(crate) fn verify_sum_check<F: PrimeField>(
     y: &[F],
     transcript: &mut impl FieldTranscriptRead<F>,
 ) -> Result<(Vec<Vec<F>>, Vec<Evaluation<F>>), Error> {
-    let (x_eval, x) = ClassicSumCheck::<EvaluationsProver<_>, BinaryField>::verify(
+    let (x_eval, x) = ClassicSumCheck::<EvaluationsProver<_>, Lexical>::verify(
         &(),
         num_vars,
         expression.degree(),
@@ -71,11 +69,11 @@ pub(crate) fn verify_sum_check<F: PrimeField>(
         .into_iter()
         .unzip::<_, _, Vec<_>, Vec<_>>();
 
-    let evals = instance_evals::<_, BinaryField>(num_vars, expression, instances, &x)
+    let evals = instance_evals::<_, Lexical>(num_vars, expression, instances, &x)
         .into_iter()
         .chain(evals)
         .collect();
-    if evaluate::<_, BinaryField>(expression, num_vars, &evals, challenges, &[y], &x) != x_eval {
+    if evaluate::<_, Lexical>(expression, num_vars, &evals, challenges, &[y], &x) != x_eval {
         return Err(Error::InvalidSnark(
             "Unmatched between sum_check output and query evaluation".to_string(),
         ));
@@ -102,7 +100,7 @@ pub(super) fn verify_zero_check_with_shift<F: PrimeField>(
     challenges: &[F],
     y: &[F],
     transcript: &mut impl FieldTranscriptRead<F>,
-) -> Result<(Vec<Vec<F>>, Vec<Evaluation_for_shift<F>>), Error> {
+) -> Result<(Vec<Vec<F>>, Vec<evaluation_for_shift<F>>), Error> {
     verify_sum_check_with_shift(
         num_vars,
         expression,
@@ -123,7 +121,7 @@ pub(crate) fn verify_sum_check_with_shift<F: PrimeField>(
     challenges: &[F],
     y: &[F],
     transcript: &mut impl FieldTranscriptRead<F>,
-) -> Result<(Vec<Vec<F>>, Vec<Evaluation_for_shift<F>>), Error> {
+) -> Result<(Vec<Vec<F>>, Vec<evaluation_for_shift<F>>), Error> {
     // println!("verify_sum_check_with_shift");
     let (x_eval, x) = ClassicSumCheck::<EvaluationsProver<_>, Lexical>::verify(
         &(),
@@ -148,7 +146,7 @@ pub(crate) fn verify_sum_check_with_shift<F: PrimeField>(
             .into_iter()
             .chain(evals)
             .collect();
-
+    println!("sumcheck.evals={:?}",evals);
     if evaluate::<F, Lexical>(expression, num_vars, &evals, challenges, &[y], &x) != x_eval {
         return Err(Error::InvalidSnark(
             "Unmatched between sum_check output and query evaluation".to_string(),
@@ -157,12 +155,13 @@ pub(crate) fn verify_sum_check_with_shift<F: PrimeField>(
 
     let evals = pcs_query
         .iter()
-        .map(|query| Evaluation_for_shift::new(query.poly(), query.rotation(), evals[query]))
+        .map(|query| evaluation_for_shift::new(query.poly(), query.rotation(), evals[query]))
         .collect_vec();
 
     Ok((vec![x], evals))
 }
 
+//TODO how about take rotated poly way?
 pub(crate) fn instance_evals<F: PrimeField, R: Rotatable + From<usize>>(
     num_vars: usize,
     expression: &Expression<F>,
@@ -186,6 +185,9 @@ pub(crate) fn instance_evals<F: PrimeField, R: Rotatable + From<usize>>(
     instance_query
         .into_iter()
         .map(|query| {
+            //here just poly*rotated x,
+            //in general,it rotate poly,rotation>0, left rotate poly, rotation<0, right rotate poly
+            //here just fix poly, rotate x points,if rotation>0,
             let offset = (max_rotation - query.rotation().0) as usize;
             let eval = inner_product(
                 &instances[query.poly()],

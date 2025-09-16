@@ -1,4 +1,11 @@
-use crate::util::{arithmetic::Field, izip, Deserialize, Itertools, Serialize};
+use crate::util::{
+    arithmetic::Field, arithmetic::FieldExt, izip, Deserialize, Itertools, Serialize,
+};
+use halo2_proofs::helpers::read_u32;
+use halo2_proofs::helpers::Serializable;
+use num;
+use num::FromPrimitive;
+use num_derive::FromPrimitive;
 use std::{
     borrow::Borrow,
     collections::BTreeSet,
@@ -12,8 +19,8 @@ pub mod evaluator;
 pub mod relaxed;
 pub mod rotate;
 
-pub use rotate::Rotation;
 pub use rotate::Rotatable;
+pub use rotate::Rotation;
 
 //TODO how to refactor to halo2's Query(Advice,Fix..), thus, poly will be relative index,not global idx
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -50,6 +57,21 @@ pub enum CommonPolynomial {
     Identity,
     Lagrange(i32),
     EqXY(usize),
+}
+
+#[derive(FromPrimitive)]
+enum CommonPolynomialCode {
+    Identity = 0,
+    Lagrange,
+    EqXY,
+}
+
+fn common_poly_code(p: &CommonPolynomial) -> CommonPolynomialCode {
+    match p {
+        CommonPolynomial::Identity => CommonPolynomialCode::Identity,
+        CommonPolynomial::Lagrange(_) => CommonPolynomialCode::Lagrange,
+        CommonPolynomial::EqXY(_) => CommonPolynomialCode::EqXY,
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -558,5 +580,147 @@ fn merge_left_right<T: Ord>(
             Some(lhs)
         }
         _ => None,
+    }
+}
+
+#[derive(FromPrimitive)]
+enum ExpressionCode {
+    Constant = 0,
+    CommonPolynomial,
+    Polynomial,
+    Challenge,
+    Negated,
+    Sum,
+    Product,
+    Scaled,
+    DistributePowers,
+}
+
+fn expression_code<F: Field>(e: &Expression<F>) -> ExpressionCode {
+    match e {
+        Expression::Constant(_) => ExpressionCode::Constant,
+        Expression::CommonPolynomial(_) => ExpressionCode::CommonPolynomial,
+        Expression::Polynomial(_) => ExpressionCode::Polynomial,
+        Expression::Challenge(_) => ExpressionCode::Challenge,
+        Expression::Negated(_) => ExpressionCode::Negated,
+        Expression::Sum(_, _) => ExpressionCode::Sum,
+        Expression::Product(_, _) => ExpressionCode::Product,
+        Expression::Scaled(_, _) => ExpressionCode::Scaled,
+        Expression::DistributePowers(_, _) => ExpressionCode::DistributePowers,
+    }
+}
+
+impl<F: FieldExt> Serializable for Expression<F> {
+    fn fetch<R: io::Read>(reader: &mut R) -> io::Result<Expression<F>> {
+        let code = read_u32(reader)?;
+        match num::FromPrimitive::from_u32(code).unwrap() {
+            ExpressionCode::Constant => {
+                let scalar = F::read(reader)?;
+                Ok(Expression::Constant(scalar))
+            }
+            ExpressionCode::CommonPolynomial => {
+                let code = read_u32(reader)?;
+                match num::FromPrimitive::from_u32(code).unwrap() {
+                    CommonPolynomialCode::Identity => {
+                        Ok(Expression::CommonPolynomial(CommonPolynomial::Identity))
+                    }
+                    CommonPolynomialCode::Lagrange => {
+                        let v = read_u32(reader)? as i32;
+                        Ok(Expression::CommonPolynomial(CommonPolynomial::Lagrange(v)))
+                    }
+                    CommonPolynomialCode::EqXY => {
+                        let v = read_u32(reader)? as usize;
+                        Ok(Expression::CommonPolynomial(CommonPolynomial::EqXY(v)))
+                    }
+                }
+            }
+            ExpressionCode::Polynomial => {
+                let poly = read_u32(reader)? as usize;
+                let rotation = read_u32(reader)? as i32;
+                Ok(Expression::Polynomial(Query::new(poly, rotation)))
+            }
+            ExpressionCode::Challenge => {
+                let v = read_u32(reader)? as usize;
+                Ok(Expression::Challenge(v))
+            }
+            ExpressionCode::Negated => Ok(Expression::Negated(Box::new(Self::fetch(reader)?))),
+
+            ExpressionCode::Sum => {
+                let a = Self::fetch(reader)?;
+                let b = Self::fetch(reader)?;
+                Ok(Expression::Sum(Box::new(a), Box::new(b)))
+            }
+
+            ExpressionCode::Product => {
+                let a = Self::fetch(reader)?;
+                let b = Self::fetch(reader)?;
+                Ok(Expression::Product(Box::new(a), Box::new(b)))
+            }
+
+            ExpressionCode::Scaled => {
+                let a = Self::fetch(reader)?;
+                let f = F::read(reader)?;
+                Ok(Expression::Scaled(Box::new(a), f))
+            }
+            ExpressionCode::DistributePowers => {
+                let a: Vec<Expression<_>> = Vec::<Expression<F>>::fetch(reader)?;
+                let b = Self::fetch(reader)?;
+                Ok(Expression::DistributePowers(a, Box::new(b)))
+            }
+        }
+    }
+
+    fn store<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+        writer.write(&mut (expression_code(self) as u32).to_le_bytes())?;
+        match self {
+            Expression::Constant(scalar) => {
+                writer.write(&mut scalar.to_repr().as_ref())?;
+                Ok(())
+            }
+            Expression::CommonPolynomial(poly) => {
+                writer.write(&mut (common_poly_code(poly) as u32).to_le_bytes())?;
+                match poly {
+                    CommonPolynomial::Identity => Ok(()),
+                    CommonPolynomial::Lagrange(v) => {
+                        writer.write(&v.to_le_bytes())?;
+                        Ok(())
+                    }
+                    CommonPolynomial::EqXY(v) => {
+                        writer.write(&(*v as u32).to_le_bytes())?;
+                        Ok(())
+                    }
+                }
+            }
+            Expression::Polynomial(query) => {
+                writer.write(&(query.poly() as u32).to_le_bytes())?;
+                writer.write(&(query.rotation().0 as u32).to_le_bytes())?;
+                Ok(())
+            }
+            Expression::Challenge(v) => {
+                writer.write(&(*v as u32).to_le_bytes())?;
+                Ok(())
+            }
+            Expression::Negated(a) => a.store(writer),
+            Expression::Sum(a, b) => {
+                a.store(writer)?;
+                b.store(writer)?;
+                Ok(())
+            }
+            Expression::Product(a, b) => {
+                a.store(writer)?;
+                b.store(writer)?;
+                Ok(())
+            }
+            Expression::Scaled(a, f) => {
+                a.store(writer)?;
+                writer.write(&mut f.to_repr().as_ref())?;
+                Ok(())
+            }
+            Expression::DistributePowers(a, b) => {
+                a.store(writer)?;
+                b.store(writer)?;
+                Ok(())
+            }
+        }
     }
 }

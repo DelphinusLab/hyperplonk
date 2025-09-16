@@ -1,13 +1,12 @@
+use super::{FieldTranscript, FieldTranscriptRead, FieldTranscriptWrite};
+use super::{Transcript, TranscriptRead, TranscriptWrite};
+use crate::Error;
 use halo2_proofs::arithmetic::CurveAffine;
 use halo2_proofs::pairing::group::ff::PrimeField;
 use halo2_proofs::transcript::EncodedChallenge;
 use poseidon::Poseidon;
 use std::io;
 use std::marker::PhantomData;
-use super::{FieldTranscript,FieldTranscriptRead,FieldTranscriptWrite};
-use super::{Transcript,TranscriptRead,TranscriptWrite};
-use crate::Error;
-
 
 use super::util::encode_point;
 
@@ -66,31 +65,31 @@ impl<R: io::Read, C: CurveAffine, E: EncodedChallenge<C>> PoseidonRead<R, C, E> 
     }
 }
 
-
 impl<R: io::Read, C: CurveAffine> FieldTranscript<C::Scalar>
-for PoseidonRead<R, C, PoseidonEncodedChallenge<C>>
+    for PoseidonRead<R, C, PoseidonEncodedChallenge<C>>
 {
     fn squeeze_challenge(&mut self) -> C::Scalar {
         self.poseidon.squeeze_challenge()
     }
 
-    fn common_field_element(&mut self, scalar: &C::Scalar) -> Result<(), Error>{
+    fn common_field_element(&mut self, scalar: &C::Scalar) -> Result<(), Error> {
         self.poseidon.common_field_element(scalar)
     }
-
 }
 
-
-
 impl<R: io::Read, C: CurveAffine> FieldTranscriptRead<C::Scalar>
-for PoseidonRead<R, C, PoseidonEncodedChallenge<C>>
+    for PoseidonRead<R, C, PoseidonEncodedChallenge<C>>
 {
-    fn read_field_element(&mut self) -> Result<<C>::Scalar,Error> {
+    fn read_field_element(&mut self) -> Result<<C>::Scalar, Error> {
         let mut data = <C::Scalar as PrimeField>::Repr::default();
-        self.reader.read_exact(data.as_mut())
+        self.reader
+            .read_exact(data.as_mut())
             .map_err(|err| Error::Transcript(err.kind(), err.to_string()))?;
         let scalar: C::Scalar = Option::from(C::Scalar::from_repr(data)).ok_or_else(|| {
-            Error::Transcript(io::ErrorKind::Other, "invalid field encoding in proof".into())
+            Error::Transcript(
+                io::ErrorKind::Other,
+                "invalid field encoding in proof".into(),
+            )
         })?;
         self.common_field_element(&scalar)?;
 
@@ -98,73 +97,70 @@ for PoseidonRead<R, C, PoseidonEncodedChallenge<C>>
     }
 }
 
-
-impl<R: io::Read, C: CurveAffine> Transcript<C,C::Scalar>
-for PoseidonRead<R, C, PoseidonEncodedChallenge<C>>
+impl<R: io::Read, C: CurveAffine> Transcript<C, C::Scalar>
+    for PoseidonRead<R, C, PoseidonEncodedChallenge<C>>
 {
-
-    fn common_commitment(&mut self, point: &C) -> Result<(),Error> {
+    fn common_commitment(&mut self, point: &C) -> Result<(), Error> {
         self.poseidon.common_commitment(point)
     }
-
 }
 
 impl<R: io::Read, C: CurveAffine> TranscriptRead<C, C::Scalar>
     for PoseidonRead<R, C, PoseidonEncodedChallenge<C>>
 {
-    fn read_commitment(&mut self) -> Result<C,Error> {
+    fn read_commitment(&mut self) -> Result<C, Error> {
         let mut compressed = C::Repr::default();
-        self.reader.read_exact(compressed.as_mut())
+        self.reader
+            .read_exact(compressed.as_mut())
             .map_err(|err| Error::Transcript(err.kind(), err.to_string()))?;
         let point: C = Option::from(C::from_bytes(&compressed)).ok_or_else(|| {
-            Error::Transcript(io::ErrorKind::Other, "read.invalid point encoding in proof".into())
+            Error::Transcript(
+                io::ErrorKind::Other,
+                "read.invalid point encoding in proof".into(),
+            )
         })?;
         self.common_commitment(&point)?;
 
         Ok(point)
     }
-
 }
 
-
 impl<W: io::Write, C: CurveAffine> FieldTranscript<C::Scalar>
-for PoseidonWrite<W, C, PoseidonEncodedChallenge<C>>
+    for PoseidonWrite<W, C, PoseidonEncodedChallenge<C>>
 {
     fn squeeze_challenge(&mut self) -> C::Scalar {
         self.poseidon.squeeze_challenge()
     }
 
-    fn common_field_element(&mut self, scalar: &C::Scalar) -> Result<(), Error>{
+    fn common_field_element(&mut self, scalar: &C::Scalar) -> Result<(), Error> {
         self.poseidon.common_field_element(scalar)
     }
-
 }
 
 impl<W: io::Write, C: CurveAffine> FieldTranscriptWrite<C::Scalar>
-for PoseidonWrite<W, C, PoseidonEncodedChallenge<C>>
+    for PoseidonWrite<W, C, PoseidonEncodedChallenge<C>>
 {
-    fn write_field_element(&mut self, scalar: &<C>::Scalar) -> Result<(),Error> {
+    fn write_field_element(&mut self, scalar: &<C>::Scalar) -> Result<(), Error> {
         self.common_field_element(scalar)?;
         let data = scalar.to_repr();
-        self.writer.write_all(data.as_ref())
+        self.writer
+            .write_all(data.as_ref())
             .map_err(|err| Error::Transcript(err.kind(), err.to_string()))
     }
-
 }
 
-impl<W: io::Write, C: CurveAffine> Transcript<C,C::Scalar>
-for PoseidonWrite<W, C, PoseidonEncodedChallenge<C>>
+impl<W: io::Write, C: CurveAffine> Transcript<C, C::Scalar>
+    for PoseidonWrite<W, C, PoseidonEncodedChallenge<C>>
 {
-    fn common_commitment(&mut self, point: &C) -> Result<(),Error> {
+    fn common_commitment(&mut self, point: &C) -> Result<(), Error> {
         self.poseidon.common_commitment(point)
     }
-
 }
 
 impl<W: io::Write, C: CurveAffine> TranscriptWrite<C, C::Scalar>
-for PoseidonWrite<W, C, PoseidonEncodedChallenge<C>>
+    for PoseidonWrite<W, C, PoseidonEncodedChallenge<C>>
 {
-    fn write_commitment(&mut self, point: &C) -> Result<(),Error> {
+    fn write_commitment(&mut self, point: &C) -> Result<(), Error> {
         //assert!(point != C::identity());
         self.common_commitment(point)?;
         let compressed = point.to_bytes();
@@ -172,7 +168,6 @@ for PoseidonWrite<W, C, PoseidonEncodedChallenge<C>>
             .write_all(compressed.as_ref())
             .map_err(|err| Error::Transcript(err.kind(), err.to_string()))
     }
-
 }
 
 pub struct PoseidonWrite<W: io::Write, C: CurveAffine, E: EncodedChallenge<C>> {
@@ -204,8 +199,6 @@ impl<W: io::Write, C: CurveAffine, E: EncodedChallenge<C>> PoseidonWrite<W, C, E
     }
 }
 
-
-
 #[derive(Debug, Clone)]
 pub struct PoseidonPure<C: CurveAffine> {
     state: Poseidon<C::ScalarExt, T, RATE>,
@@ -234,7 +227,7 @@ impl<C: CurveAffine> FieldTranscript<C::Scalar> for PoseidonPure<C> {
         PoseidonEncodedChallenge::<C>::new(&self.state.squeeze()).get_scalar()
     }
 
-    fn common_field_element(&mut self, scalar: &C::Scalar) -> Result<(),Error> {
+    fn common_field_element(&mut self, scalar: &C::Scalar) -> Result<(), Error> {
         self.state.update(&[C::ScalarExt::from(PREFIX_SCALAR)]);
         self.state.update(&[*scalar]);
 
@@ -242,9 +235,8 @@ impl<C: CurveAffine> FieldTranscript<C::Scalar> for PoseidonPure<C> {
     }
 }
 
-impl<C: CurveAffine> Transcript<C,C::Scalar> for PoseidonPure<C> {
-
-    fn common_commitment(&mut self, point: &C) -> Result<(),Error> {
+impl<C: CurveAffine> Transcript<C, C::Scalar> for PoseidonPure<C> {
+    fn common_commitment(&mut self, point: &C) -> Result<(), Error> {
         self.state.update(&[C::ScalarExt::from(PREFIX_POINT)]);
 
         let elem = encode_point(point);
@@ -252,5 +244,4 @@ impl<C: CurveAffine> Transcript<C,C::Scalar> for PoseidonPure<C> {
         self.state.update(&elem);
         Ok(())
     }
-
 }

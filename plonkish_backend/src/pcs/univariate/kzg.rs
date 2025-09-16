@@ -15,6 +15,7 @@ use crate::{
     },
     Error,
 };
+use halo2_proofs::helpers::CurveRead;
 use rand::RngCore;
 use std::{marker::PhantomData, ops::Neg, slice};
 
@@ -52,6 +53,21 @@ pub struct UnivariateKzgParam<M: MultiMillerLoop> {
 }
 
 impl<M: MultiMillerLoop> UnivariateKzgParam<M> {
+    pub fn new(
+        k: usize,
+        monomial_g1: Vec<M::G1Affine>,
+        lagrange_g1: &Vec<M::G1Affine>,
+        s_g2: M::G2Affine,
+    ) -> Self {
+        let lag_g1 = lagrange_g1.iter().map(|v| v.clone()).collect::<Vec<_>>();
+        let g2 = M::G2Affine::generator();
+        UnivariateKzgParam {
+            k,
+            monomial_g1,
+            lagrange_g1: lag_g1,
+            powers_of_s_g2: vec![g2,s_g2],
+        }
+    }
     pub fn k(&self) -> usize {
         self.k
     }
@@ -130,6 +146,10 @@ pub struct UnivariateKzgVerifierParam<M: MultiMillerLoop> {
 }
 
 impl<M: MultiMillerLoop> UnivariateKzgVerifierParam<M> {
+    pub fn new(g1: M::G1Affine, g2: M::G2Affine, s_g2: M::G2Affine) -> Self {
+        Self { g1, g2, s_g2 }
+    }
+
     pub fn g1(&self) -> M::G1Affine {
         self.g1
     }
@@ -235,7 +255,6 @@ where
             let window_table = window_table(window_size, g2);
             batch_projective_to_affine(&fixed_base_msm(window_size, &window_table, &powers_of_s_g2))
         };
-
         Ok(Self::Param {
             k: poly_size.ilog2() as usize,
             monomial_g1,
@@ -250,7 +269,7 @@ where
         _: usize,
     ) -> Result<(Self::ProverParam, Self::VerifierParam), Error> {
         assert!(poly_size.is_power_of_two());
-
+        println!("trim.monomial_g1.len={},poly_size={}",param.monomial_g1.len(),poly_size);
         if param.monomial_g1.len() < poly_size {
             return Err(err_too_large_deree("trim", param.degree(), poly_size - 1));
         }
@@ -317,9 +336,10 @@ where
                 assert_eq!(&remainder[0], eval);
             }
         }
-
-        transcript.write_commitment(&Self::commit_monomial(pp, quotient.coeffs()).0)?;
-
+        let pi = Self::commit_monomial(pp, quotient.coeffs()).0;
+        println!("prove.quotient.pi={:?}",pi);
+        // transcript.write_commitment(&Self::commit_monomial(pp, quotient.coeffs()).0)?;
+        transcript.write_commitment(&pi)?;
         Ok(())
     }
 

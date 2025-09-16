@@ -1,11 +1,11 @@
 use crate::{
     pcs::{CommitmentChunk, PolynomialCommitmentScheme},
     util::{
-        arithmetic::Field,
+        arithmetic::CurveAffine,
         chain,
         expression::Expression,
         transcript::{TranscriptRead, TranscriptWrite},
-        Deserialize, DeserializeOwned, Itertools, Serialize,
+        DeserializeOwned, Itertools, Serialize,
     },
     Error,
 };
@@ -13,42 +13,59 @@ use rand::RngCore;
 use std::{collections::BTreeSet, fmt::Debug};
 
 pub mod hyperplonk;
-pub mod unihyperplonk;
 
-pub trait PlonkishBackend<F: Field>: Clone + Debug {
-    type Pcs: PolynomialCommitmentScheme<F>;
+pub trait PlonkishBackend<C: CurveAffine>: Clone + Debug {
+    type Pcs: PolynomialCommitmentScheme<C::ScalarExt, CommitmentChunk = C>;
     type ProverParam: Clone + Debug + Serialize + DeserializeOwned;
     type VerifierParam: Clone + Debug + Serialize + DeserializeOwned;
+    type ProverSetupParam: Clone + Debug;
+    type VerifierSetupParam: Clone + Debug;
 
     fn setup(
-        circuit_info: &PlonkishCircuitInfo<F>,
+        circuit_info: &PlonkishCircuitInfo<C::ScalarExt>,
         rng: impl RngCore,
-    ) -> Result<<Self::Pcs as PolynomialCommitmentScheme<F>>::Param, Error>;
+    ) -> Result<<Self::Pcs as PolynomialCommitmentScheme<C::ScalarExt>>::Param, Error>;
+
+    // fn preprocess(
+    //     param: &<Self::Pcs as PolynomialCommitmentScheme<C::ScalarExt>>::Param,
+    //     circuit_info: &PlonkishCircuitInfo<C::ScalarExt>,
+    // ) -> Result<(Self::ProverParam, Self::VerifierParam,Self::ProverSetupParam,Self::VerifierSetupParam,VerifyingKey<<Self::Pcs as PolynomialCommitmentScheme<C::ScalarExt>>::CommitmentChunk>), Error>;
 
     fn preprocess(
-        param: &<Self::Pcs as PolynomialCommitmentScheme<F>>::Param,
-        circuit_info: &PlonkishCircuitInfo<F>,
-    ) -> Result<(Self::ProverParam, Self::VerifierParam), Error>;
+        param: &<Self::Pcs as PolynomialCommitmentScheme<C::ScalarExt>>::Param,
+        circuit_info: &PlonkishCircuitInfo<C::ScalarExt>,
+    ) -> Result<
+        (
+            Self::ProverParam,
+            Self::VerifierParam,
+            Self::ProverSetupParam,
+            Self::VerifierSetupParam,
+        ),
+        Error,
+    >;
 
     fn prove(
+        ps: &Self::ProverSetupParam,
         pp: &Self::ProverParam,
-        circuit: &impl PlonkishCircuit<F>,
-        transcript: &mut impl TranscriptWrite<CommitmentChunk<F, Self::Pcs>, F>,
+        circuit: &impl PlonkishCircuit<C::ScalarExt>,
+        transcript: &mut impl TranscriptWrite<CommitmentChunk<C::ScalarExt, Self::Pcs>, C::ScalarExt>,
+        // transcript: &mut impl TranscriptWrite<CommitmentChunk<C::ScalarExt, Self::Pcs>, C::ScalarExt>,
         rng: impl RngCore,
     ) -> Result<(), Error>;
 
     fn verify(
+        vs: &Self::VerifierSetupParam,
         vp: &Self::VerifierParam,
-        instances: &[Vec<F>],
-        transcript: &mut impl TranscriptRead<CommitmentChunk<F, Self::Pcs>, F>,
+        instances: &[Vec<C::ScalarExt>],
+        transcript: &mut impl TranscriptRead<CommitmentChunk<C::ScalarExt, Self::Pcs>, C::ScalarExt>,
         rng: impl RngCore,
     ) -> Result<(), Error>;
 
     fn prove_with_shift(
-        pp: &Self::ProverParam,
-        circuit: &impl PlonkishCircuit<F>,
-        transcript: &mut impl TranscriptWrite<CommitmentChunk<F, Self::Pcs>, F>,
-        rng: impl RngCore,
+        _ps: &Self::ProverSetupParam,
+        _pp: &Self::ProverParam,
+        _circuit: &impl PlonkishCircuit<C::ScalarExt>,
+        _transcript: &mut impl TranscriptWrite<CommitmentChunk<C::ScalarExt, Self::Pcs>, C::ScalarExt>,
     ) -> Result<(), Error> {
         Err(Error::NotImplemented(
             "prove_with_shift not implemented".to_string(),
@@ -56,10 +73,10 @@ pub trait PlonkishBackend<F: Field>: Clone + Debug {
     }
 
     fn verify_with_shift(
-        vp: &Self::VerifierParam,
-        instances: &[Vec<F>],
-        transcript: &mut impl TranscriptRead<CommitmentChunk<F, Self::Pcs>, F>,
-        rng: impl RngCore,
+        _vs: &Self::VerifierSetupParam,
+        _vp: &Self::VerifierParam,
+        _instances: &[Vec<C::ScalarExt>],
+        _transcript: &mut impl TranscriptRead<CommitmentChunk<C::ScalarExt, Self::Pcs>, C::ScalarExt>,
     ) -> Result<(), Error> {
         Err(Error::NotImplemented(
             "verify_with_shift not implemented".to_string(),
@@ -67,23 +84,23 @@ pub trait PlonkishBackend<F: Field>: Clone + Debug {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct PlonkishCircuitInfo<F> {
     /// 2^k is the size of the circuit
     pub k: usize,
-    /// Number of instnace value in each instance polynomial.
-    pub num_instances: Vec<usize>,
+    /// Number of instance columns.
+    pub num_instances: usize,
     /// Preprocessed polynomials, which has index starts with offset
     /// `num_instances.len()`.
     pub preprocess_polys: Vec<Vec<F>>,
     /// Number of witness polynoimal in each phase.
     /// Witness polynomial index starts with offset `num_instances.len()` +
     /// `preprocess_polys.len()`.
-    pub num_witness_polys: Vec<usize>,
+    pub num_witness_polys: usize,
     /// named advices column
-    pub named_witnesses: Vec<(String,u32)>,
-    /// Number of challenge in each phase.
-    pub num_challenges: Vec<usize>,
+    pub named_witnesses: Vec<(String, u32)>,
+    // /// Number of challenge in each phase.
+    // pub num_challenges: Vec<usize>,
     /// Constraints.
     pub constraints: Vec<Expression<F>>,
     /// Each item inside outer vector repesents an independent vector lookup,
@@ -101,7 +118,7 @@ pub struct PlonkishCircuitInfo<F> {
 impl<F: Clone> PlonkishCircuitInfo<F> {
     pub fn is_well_formed(&self) -> bool {
         let num_poly = self.num_poly();
-        let num_challenges = self.num_challenges.iter().sum::<usize>();
+        // let num_challenges = self.num_challenges.iter().sum::<usize>();
         let polys = chain![
             self.expressions().flat_map(Expression::used_poly),
             self.permutation_polys(),
@@ -110,15 +127,16 @@ impl<F: Clone> PlonkishCircuitInfo<F> {
         let challenges = chain![self.expressions().flat_map(Expression::used_challenge)]
             .collect::<BTreeSet<_>>();
         // Same amount of phases
-        self.num_witness_polys.len() == self.num_challenges.len()
-            // Every phase has some witness polys
-            && !self.num_witness_polys.iter().any(|n| *n == 0)
-            // Every phase except the last one has some challenges after the witness polys are committed
-            && !self.num_challenges[..self.num_challenges.len() - 1].iter().any(|n| *n == 0)
-            // Polynomial indices are in range
-            && (polys.is_empty() || *polys.last().unwrap() < num_poly)
+        // self.num_witness_polys.len() == self.num_challenges.len()
+        //     // Every phase has some witness polys
+        //     && !self.num_witness_polys.iter().any(|n| *n == 0)
+        //     // Every phase except the last one has some challenges after the witness polys are committed
+        //     && !self.num_challenges[..self.num_challenges.len() - 1].iter().any(|n| *n == 0)
+        // Polynomial indices are in range
+        self.num_witness_polys>0
+            &&(polys.is_empty() || *polys.last().unwrap() < num_poly)
             // Challenge indices are in range
-            && (challenges.is_empty() || *challenges.last().unwrap() < num_challenges)
+            && challenges.is_empty()
             // Every constraint has degree less equal than `max_degree`
             && self
                 .max_degree
@@ -132,9 +150,7 @@ impl<F: Clone> PlonkishCircuitInfo<F> {
     }
 
     pub fn num_poly(&self) -> usize {
-        self.num_instances.len()
-            + self.preprocess_polys.len()
-            + self.num_witness_polys.iter().sum::<usize>()
+        self.num_instances + self.preprocess_polys.len() + self.num_witness_polys
     }
 
     pub fn permutation_polys(&self) -> Vec<usize> {
@@ -156,13 +172,13 @@ impl<F: Clone> PlonkishCircuitInfo<F> {
 }
 
 pub trait PlonkishCircuit<F> {
-    fn circuit_info_without_preprocess(&self) -> Result<PlonkishCircuitInfo<F>, Error>;
+    // fn circuit_info_without_preprocess(k:usize,cs:&ConstraintSystem<F>) -> PlonkishCircuitInfo<F>;
 
     fn circuit_info(&self) -> Result<PlonkishCircuitInfo<F>, Error>;
 
     fn instances(&self) -> &[Vec<F>];
 
-    fn synthesize(&self, round: usize, challenges: &[F]) -> Result<Vec<Vec<F>>, Error>;
+    fn synthesize(&self) -> Result<Vec<Vec<F>>, Error>;
 }
 
 pub trait WitnessEncoding {

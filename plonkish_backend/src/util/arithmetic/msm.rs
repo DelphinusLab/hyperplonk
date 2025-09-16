@@ -4,7 +4,7 @@ use crate::{
         arithmetic::{div_ceil, field_size, CurveAffine, Field, Group, PrimeField},
         chain, izip_eq,
         parallel::{num_threads, parallelize, parallelize_iter},
-        start_timer, Itertools,
+        Itertools,
     },
 };
 use std::{

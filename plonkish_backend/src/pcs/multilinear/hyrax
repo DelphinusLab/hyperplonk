@@ -104,8 +104,8 @@ impl<C: CurveAffine> Additive<C::Scalar> for MultilinearHyraxCommitment<C> {
 
 impl<C> PolynomialCommitmentScheme<C::Scalar> for MultilinearHyrax<C>
 where
-    C: CurveAffine + Serialize + DeserializeOwned,
-    C::ScalarExt: Serialize + DeserializeOwned,
+    C: CurveAffine ,
+    // C::ScalarExt,
 {
     type Param = MultilinearHyraxParam<C>;
     type ProverParam = MultilinearHyraxParam<C>;

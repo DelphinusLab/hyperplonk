@@ -15,7 +15,7 @@ use plonkish_backend::{
 };
 use pprof::criterion::{Output, PProfProfiler};
 
-type ZeroCheck = ClassicSumCheck<EvaluationsProver<Fr>, BinaryField>;
+type ZeroCheck = ClassicSumCheck<EvaluationsProver<Fr>, Lexical>;
 
 fn run(num_vars: usize, virtual_poly: VirtualPolynomial<Fr>) {
     let mut transcript = Keccak256Transcript::<Vec<u8>>::default();
@@ -25,7 +25,7 @@ fn run(num_vars: usize, virtual_poly: VirtualPolynomial<Fr>) {
 fn zero_check(c: &mut Criterion) {
     let setup = |num_vars: usize| {
         let expression = vanilla_plonk_expression(num_vars);
-        let (polys, challenges) = rand_vanilla_plonk_assignment::<Fr, BinaryField>(
+        let (polys, challenges) = rand_vanilla_plonk_assignment::<Fr, Lexical>(
             num_vars,
             seeded_std_rng(),
             seeded_std_rng(),

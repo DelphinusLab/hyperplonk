@@ -1,8 +1,8 @@
 use crate::{
     poly::Polynomial,
     util::{
-        arithmetic::Field,
         arithmetic::CurveAffine,
+        arithmetic::Field,
         expression::Rotation,
         transcript::{TranscriptRead, TranscriptWrite},
         DeserializeOwned, Serialize,
@@ -25,14 +25,15 @@ pub trait PolynomialCommitmentScheme<F: Field>: Clone + Debug {
     type Param: Clone + Debug + Serialize + DeserializeOwned;
     type ProverParam: Clone + Debug + Serialize + DeserializeOwned;
     type VerifierParam: Clone + Debug + Serialize + DeserializeOwned;
-    type Polynomial: Polynomial<F> + Serialize + DeserializeOwned;
+    type Polynomial: Polynomial<F>;
     type Commitment: Clone
         + Debug
         + Default
         + AsRef<[Self::CommitmentChunk]>
         + Serialize
-        + DeserializeOwned;
-    type CommitmentChunk: Clone + Debug + Default+CurveAffine+Sized;
+        + DeserializeOwned
+        + From<Self::CommitmentChunk>;
+    type CommitmentChunk: Clone + Debug + Default + CurveAffine + Sized;
 
     fn setup(poly_size: usize, batch_size: usize, rng: impl RngCore) -> Result<Self::Param, Error>;
 
@@ -129,7 +130,7 @@ pub trait PolynomialCommitmentScheme<F: Field>: Clone + Debug {
         polys: impl IntoIterator<Item = &'a Self::Polynomial>,
         comms: impl IntoIterator<Item = &'a Self::Commitment>,
         points: &[Point<F, Self::Polynomial>],
-        evals: &[Evaluation_for_shift<F>],
+        evals: &[evaluation_for_shift<F>],
         transcript: &mut impl TranscriptWrite<Self::CommitmentChunk, F>,
     ) -> Result<(), Error>
     where
@@ -178,7 +179,7 @@ pub trait PolynomialCommitmentScheme<F: Field>: Clone + Debug {
         vp: &Self::VerifierParam,
         comms: impl IntoIterator<Item = &'a Self::Commitment>,
         points: &[Point<F, Self::Polynomial>],
-        evals: &[Evaluation_for_shift<F>],
+        evals: &[evaluation_for_shift<F>],
         transcript: &mut impl TranscriptRead<Self::CommitmentChunk, F>,
     ) -> Result<(), Error>
     where
@@ -226,13 +227,13 @@ pub trait Additive<F: Field>: Clone + Debug + Default + PartialEq + Eq {
 }
 
 #[derive(Clone, Debug)]
-pub struct Evaluation_for_shift<F> {
+pub struct evaluation_for_shift<F> {
     poly: usize,
     rotation: Rotation,
     value: F,
 }
 
-impl<F> Evaluation_for_shift<F> {
+impl<F> evaluation_for_shift<F> {
     pub fn new(poly: usize, rotation: Rotation, value: F) -> Self {
         Self {
             poly,
