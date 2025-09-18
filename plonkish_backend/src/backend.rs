@@ -26,10 +26,6 @@ pub trait PlonkishBackend<C: CurveAffine>: Clone + Debug {
         rng: impl RngCore,
     ) -> Result<<Self::Pcs as PolynomialCommitmentScheme<C::ScalarExt>>::Param, Error>;
 
-    // fn preprocess(
-    //     param: &<Self::Pcs as PolynomialCommitmentScheme<C::ScalarExt>>::Param,
-    //     circuit_info: &PlonkishCircuitInfo<C::ScalarExt>,
-    // ) -> Result<(Self::ProverParam, Self::VerifierParam,Self::ProverSetupParam,Self::VerifierSetupParam,VerifyingKey<<Self::Pcs as PolynomialCommitmentScheme<C::ScalarExt>>::CommitmentChunk>), Error>;
 
     fn preprocess(
         param: &<Self::Pcs as PolynomialCommitmentScheme<C::ScalarExt>>::Param,

@@ -55,7 +55,6 @@ pub(crate) fn preprocess<
         HyperPlonkVerifierParam<C>,
         HyperPlonkProverSetupParam<C::ScalarExt, Pcs>,
         HyperPlonkVerifierSetupParam<C::ScalarExt, Pcs>,
-        // VerifyingKey<C>
     ),
     Error,
 > {
@@ -130,7 +129,6 @@ pub(crate) fn preprocess<
 pub(crate) fn compose<F: FieldExt>(
     circuit_info: &PlonkishCircuitInfo<F>,
 ) -> (usize, Expression<F>) {
-    // let challenge_offset = circuit_info.num_challenges.iter().sum::<usize>();
     let [beta, gamma, alpha] = &array::from_fn(|idx| Expression::<F>::Challenge(idx));
 
     let (lookup_constraints, lookup_zero_checks) = lookup_constraints(circuit_info, beta, gamma);

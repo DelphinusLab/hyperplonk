@@ -93,11 +93,12 @@ where
     ) -> Result<(Self::ProverParam, Self::VerifierParam), Error> {
         assert!(poly_size.is_power_of_two());
         let (commit_pp, vp) =
-            UnivariateKzg::<M>::trim(param, (poly_size + 0).next_power_of_two(), batch_size)?;
-        let offset = param.monomial_g1().len() - (poly_size + 0).next_power_of_two();
+            UnivariateKzg::<M>::trim(param, poly_size.next_power_of_two(), batch_size)?;
+        let offset = param.monomial_g1().len() - poly_size.next_power_of_two();
         let open_pp = {
             let monomial_g1 = param.monomial_g1()[offset..].to_vec();
-            UnivariateKzgProverParam::new((poly_size.ilog2() + 0) as usize, monomial_g1, Vec::new())
+            let lagrange_g1 = param.lagrange_g1()[offset..].to_vec();
+            UnivariateKzgProverParam::new(poly_size.ilog2() as usize, monomial_g1, lagrange_g1)
         };
         let s_offset_g2 = param.powers_of_s_g2()[offset];
 

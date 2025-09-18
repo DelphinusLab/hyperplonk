@@ -68,18 +68,14 @@ pub fn circuit_info_without_preprocess<E: MultiMillerLoop>(
         })
         .collect();
 
-    // let num_instances = instances.iter().map(Vec::len).collect_vec();
     let preprocess_polys =
         vec![vec![E::Scalar::zero(); 1 << k]; cs.num_selectors + cs.num_fixed_columns];
     PlonkishCircuitInfo {
         k,
         num_instances: cs.num_instance_columns,
         preprocess_polys,
-        //TODO: remove vector witnesses, keep one
         num_witness_polys: cs.num_advice_columns,
         named_witnesses: cs.named_advices.clone(),
-        //for one phase halo2, challenge is not needed
-        // num_challenges: vec![0],
         constraints,
         lookups,
         permutations: vec![],
@@ -90,7 +86,6 @@ pub fn circuit_info_without_preprocess<E: MultiMillerLoop>(
 pub fn get_circuit_info<E: MultiMillerLoop, T: Circuit<E::Scalar>>(
     k: u32,
     circuit: &T,
-    // row_mapping:&Vec<usize>
 ) -> Result<PlonkishCircuitInfo<E::Scalar>, crate::Error> {
     let cs = ConstraintSystem::default();
     let (_, cs) = cs.circuit_configure::<T>();
@@ -124,7 +119,6 @@ pub fn get_circuit_info<E: MultiMillerLoop, T: Circuit<E::Scalar>>(
 
     circuit_info.preprocess_polys = fixed.into_iter().map(|poly| poly.values).collect();
     circuit_info.permutations = permutation;
-    println!("circuit_info={:?}", circuit_info);
     Ok(circuit_info)
 }
 

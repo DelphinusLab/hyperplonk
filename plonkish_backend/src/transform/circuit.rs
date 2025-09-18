@@ -25,12 +25,6 @@ where
 {
     let cs = ConstraintSystem::default();
     let (config, cs) = cs.circuit_configure::<T>();
-    // let (instances, instances_scalar) = if instances.len() > 0 {
-    //     (vec![instances.clone()], vec![instances])
-    // } else {
-    //     (vec![], vec![])
-    // };
-
     // Convert Gate Constraints.
     ZKWASMCircuit {
         circuit,

@@ -84,10 +84,7 @@ pub fn evaluate<F: PrimeField, R: Rotatable + From<usize>>(
             CommonPolynomial::Lagrange(i) => lagranges[&i],
             CommonPolynomial::EqXY(idx) => eq_xys[idx],
         },
-        &|query| {
-            println!("sumcheck.query={:?}", query);
-            evals[&query]
-        },
+        &|query| evals[&query],
         &|idx| challenges[idx],
         &|scalar| -scalar,
         &|lhs, rhs| lhs + &rhs,

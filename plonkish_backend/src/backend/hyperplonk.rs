@@ -317,8 +317,6 @@ where
         let timer = start_timer(|| format!("pcs_batch_open-{}", evals.len()));
         Pcs::batch_open_for_shift(&ps.pcs, polys, comms, &points, &evals, transcript)?;
         end_timer(timer);
-
-        println!("prove_with_shift done");
         Ok(())
     }
 

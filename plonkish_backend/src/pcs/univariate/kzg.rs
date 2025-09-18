@@ -82,6 +82,9 @@ impl<M: MultiMillerLoop> UnivariateKzgParam<M> {
     pub fn monomial_g1(&self) -> &[M::G1Affine] {
         &self.monomial_g1
     }
+    pub fn lagrange_g1(&self) -> &[M::G1Affine] {
+        &self.lagrange_g1
+    }
 
     pub fn g2(&self) -> M::G2Affine {
         self.powers_of_s_g2[0]
@@ -268,11 +271,6 @@ where
         _: usize,
     ) -> Result<(Self::ProverParam, Self::VerifierParam), Error> {
         assert!(poly_size.is_power_of_two());
-        println!(
-            "trim.monomial_g1.len={},poly_size={}",
-            param.monomial_g1.len(),
-            poly_size
-        );
         if param.monomial_g1.len() < poly_size {
             return Err(err_too_large_deree("trim", param.degree(), poly_size - 1));
         }
@@ -340,8 +338,6 @@ where
             }
         }
         let pi = Self::commit_monomial(pp, quotient.coeffs()).0;
-        println!("prove.quotient.pi={:?}", pi);
-        // transcript.write_commitment(&Self::commit_monomial(pp, quotient.coeffs()).0)?;
         transcript.write_commitment(&pi)?;
         Ok(())
     }
