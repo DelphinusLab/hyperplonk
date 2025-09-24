@@ -2,7 +2,7 @@ use crate::{
     pcs::Additive,
     poly::Polynomial,
     util::{
-        arithmetic::{div_ceil, usize_from_bits_le, Field},
+        arithmetic::{div_ceil, usize_from_bits_le, Field, FieldExt},
         chain,
         expression::{rotate::BinaryField, Rotation},
         impl_index, izip_eq,
@@ -10,10 +10,12 @@ use crate::{
         BitIndex, Deserialize, Itertools, Serialize,
     },
 };
+use halo2_proofs::helpers::{read_u32, Serializable};
 use num_integer::Integer;
 use rand::RngCore;
 use std::{
     borrow::{Borrow, Cow},
+    io,
     iter::{self, Sum},
     mem,
     ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign},
@@ -40,6 +42,24 @@ impl<F: Field> Additive<F> for MultilinearPolynomial<F> {
         Self: 'b,
     {
         izip_eq!(scalars, bases).sum()
+    }
+}
+
+impl<F: FieldExt> Serializable for MultilinearPolynomial<F> {
+    fn fetch<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+        let len = read_u32(reader)?;
+        let mut evals = vec![];
+        for _ in 0..len {
+            evals.push(F::read(reader)?);
+        }
+        Ok(MultilinearPolynomial::new(evals))
+    }
+    fn store<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+        writer.write(&mut (self.evals().len() as u32).to_le_bytes())?;
+        for c in self.iter() {
+            writer.write(&mut c.to_repr().as_ref())?;
+        }
+        Ok(())
     }
 }
 

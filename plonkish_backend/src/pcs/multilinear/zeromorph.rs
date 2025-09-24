@@ -34,6 +34,12 @@ pub struct ZeromorphKzgProverParam<M: MultiMillerLoop> {
 }
 
 impl<M: MultiMillerLoop> ZeromorphKzgProverParam<M> {
+    pub fn new(pp: UnivariateKzgProverParam<M>) -> Self {
+        Self {
+            commit_pp: pp.clone(),
+            open_pp: pp,
+        }
+    }
     pub fn degree(&self) -> usize {
         self.commit_pp.degree()
     }
@@ -46,12 +52,12 @@ impl<M: MultiMillerLoop> ZeromorphKzgProverParam<M> {
 ))]
 pub struct ZeromorphKzgVerifierParam<M: MultiMillerLoop> {
     vp: UnivariateKzgVerifierParam<M>,
-    s_offset_g2: M::G2Affine,
+    // s_offset_g2: M::G2Affine,
 }
 
 impl<M: MultiMillerLoop> ZeromorphKzgVerifierParam<M> {
-    pub fn new(vp: UnivariateKzgVerifierParam<M>, s_offset_g2: M::G2Affine) -> Self {
-        Self { vp, s_offset_g2 }
+    pub fn new(vp: UnivariateKzgVerifierParam<M>) -> Self {
+        Self { vp }
     }
     pub fn g1(&self) -> M::G1Affine {
         self.vp.g1()
@@ -95,16 +101,18 @@ where
         let (commit_pp, vp) =
             UnivariateKzg::<M>::trim(param, poly_size.next_power_of_two(), batch_size)?;
         let offset = param.monomial_g1().len() - poly_size.next_power_of_two();
+        //currently it is zero. may not zero at original hyper plonk version.
+        assert_eq!(offset, 0);
         let open_pp = {
             let monomial_g1 = param.monomial_g1()[offset..].to_vec();
             let lagrange_g1 = param.lagrange_g1()[offset..].to_vec();
             UnivariateKzgProverParam::new(poly_size.ilog2() as usize, monomial_g1, lagrange_g1)
         };
-        let s_offset_g2 = param.powers_of_s_g2()[offset];
+        // let s_offset_g2 = param.powers_of_s_g2()[offset];
 
         Ok((
             ZeromorphKzgProverParam { commit_pp, open_pp },
-            ZeromorphKzgVerifierParam { vp, s_offset_g2 },
+            ZeromorphKzgVerifierParam { vp },
         ))
     }
 

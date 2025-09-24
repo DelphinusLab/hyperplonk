@@ -56,22 +56,22 @@ where
     F: PrimeField,
     Pcs: PolynomialCommitmentScheme<F>,
 {
-    pub(crate) pcs: Pcs::ProverParam,
+    pub pcs: Pcs::ProverParam,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(bound = "C: Serialize + DeserializeOwned, C::ScalarExt: Serialize + DeserializeOwned")]
 pub struct HyperPlonkProverParam<C: CurveAffine> {
-    pub(crate) num_instances: usize,
-    pub(crate) num_witness_polys: usize,
+    pub(crate) vk: HyperPlonkVerifierParam<C>,
     pub(crate) lookups: Vec<Vec<(Expression<C::ScalarExt>, Expression<C::ScalarExt>)>>,
-    pub(crate) num_permutation_z_polys: usize,
-    pub(crate) num_vars: usize,
-    pub(crate) expression: Expression<C::ScalarExt>,
     pub(crate) preprocess_polys: Vec<MultilinearPolynomial<C::ScalarExt>>,
-    pub(crate) preprocess_comms: Vec<C>,
     pub(crate) permutation_polys: Vec<(usize, MultilinearPolynomial<C::ScalarExt>)>,
-    pub(crate) permutation_comms: Vec<C>,
+}
+
+impl<C: CurveAffine> HyperPlonkProverParam<C> {
+    pub fn get_vk(&self) -> &HyperPlonkVerifierParam<C> {
+        &self.vk
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -91,7 +91,7 @@ pub struct HyperPlonkVerifierParam<C: CurveAffine> {
     pub num_lookups: usize,
     pub num_permutation_z_polys: usize,
     pub num_vars: usize,
-    pub expression: Expression<C::ScalarExt>,
+    pub expression: Expression<C::ScalarExt>, //also composed lookup and permutation's expression
     pub named_advices: Vec<(String, u32)>,
     pub preprocess_comms: Vec<C>,
     pub permutation_comms: Vec<C>,
@@ -143,6 +143,31 @@ impl<C: CurveAffine> Serializable for HyperPlonkVerifierParam<C> {
         for commitment in &self.permutation_comms {
             writer.write_all(commitment.to_bytes().as_ref())?;
         }
+        Ok(())
+    }
+}
+
+impl<C: CurveAffine> Serializable for HyperPlonkProverParam<C> {
+    fn fetch<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+        let vk = HyperPlonkVerifierParam::<C>::fetch(reader)?;
+        let lookups =
+            Vec::<Vec<(Expression<C::ScalarExt>, Expression<C::ScalarExt>)>>::fetch(reader)?;
+        let preprocess_polys = Vec::<MultilinearPolynomial<C::ScalarExt>>::fetch(reader)?;
+        let permutation_polys = Vec::<(usize, MultilinearPolynomial<C::ScalarExt>)>::fetch(reader)?;
+
+        Ok(Self {
+            vk,
+            lookups,
+            preprocess_polys,
+            permutation_polys,
+        })
+    }
+
+    fn store<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+        self.vk.store(writer)?;
+        self.lookups.store(writer)?;
+        self.preprocess_polys.store(writer)?;
+        self.permutation_polys.store(writer)?;
         Ok(())
     }
 }
@@ -199,7 +224,7 @@ where
         circuit: &impl PlonkishCircuit<C::ScalarExt>,
         transcript: &mut impl TranscriptWrite<C, C::ScalarExt>,
     ) -> Result<(), Error> {
-        assert_eq!(circuit.instances().len(), pp.num_instances);
+        assert_eq!(circuit.instances().len(), pp.vk.num_instances);
         let instance_polys = {
             let instances = circuit.instances();
 
@@ -208,13 +233,13 @@ where
                     transcript.common_field_element(instance)?;
                 }
             }
-            instance_polys::<_, Lexical>(pp.num_vars, instances)
+            instance_polys::<_, Lexical>(pp.vk.num_vars, instances)
         };
 
         // Round 0..n
 
-        let mut witness_polys = Vec::with_capacity(pp.num_witness_polys);
-        let mut witness_comms = Vec::with_capacity(pp.num_witness_polys);
+        let mut witness_polys = Vec::with_capacity(pp.vk.num_witness_polys);
+        let mut witness_comms = Vec::with_capacity(pp.vk.num_witness_polys);
         let mut challenges = Vec::with_capacity(4);
 
         let timer = start_timer(|| "witness_collector");
@@ -223,7 +248,7 @@ where
             .into_iter()
             .map(MultilinearPolynomial::new)
             .collect_vec();
-        assert_eq!(polys.len(), pp.num_witness_polys);
+        assert_eq!(polys.len(), pp.vk.num_witness_polys);
         end_timer(timer);
         witness_comms.extend(Pcs::batch_commit_and_write(&ps.pcs, &polys, transcript)?);
         witness_polys.extend(polys);
@@ -256,7 +281,7 @@ where
 
         let timer = start_timer(|| format!("permutation_z_polys-{}", pp.permutation_polys.len()));
         let permutation_z_polys = permutation_z_polys::<_, Lexical>(
-            pp.num_permutation_z_polys,
+            pp.vk.num_permutation_z_polys,
             &pp.permutation_polys,
             &polys,
             &beta,
@@ -272,7 +297,7 @@ where
         // Round n+2
 
         let alpha = transcript.squeeze_challenge();
-        let y = transcript.squeeze_challenges(pp.num_vars);
+        let y = transcript.squeeze_challenges(pp.vk.num_vars);
 
         let polys = chain![
             polys,
@@ -283,8 +308,8 @@ where
         .collect_vec();
         challenges.extend([beta, gamma, alpha]);
         let (points, evals) = prove_zero_check(
-            pp.num_instances,
-            &pp.expression,
+            pp.vk.num_instances,
+            &pp.vk.expression,
             &polys,
             challenges,
             y,
@@ -295,18 +320,20 @@ where
 
         let dummy_comm = Pcs::Commitment::default();
         let preprocess_comms = pp
+            .vk
             .preprocess_comms
             .iter()
             .map(|c| Pcs::Commitment::from(*c))
             .collect::<Vec<_>>();
         let permutation_comms = pp
+            .vk
             .permutation_comms
             .iter()
             .map(|c| Pcs::Commitment::from(*c))
             .collect::<Vec<_>>();
 
         let comms = chain![
-            iter::repeat(&dummy_comm).take(pp.num_instances),
+            iter::repeat(&dummy_comm).take(pp.vk.num_instances),
             &preprocess_comms,
             &witness_comms,
             &permutation_comms,
@@ -447,6 +474,39 @@ pub fn keygen_vk<E: MultiMillerLoop, T: Circuit<E::Scalar>>(
         named_advices: circuit_info.named_witnesses.clone(),
         preprocess_comms,
         permutation_comms,
+    })
+}
+
+pub fn keygen_pk<E: MultiMillerLoop, T: Circuit<E::Scalar>>(
+    params: &halo2_commitment::Params<E::G1Affine>,
+    vk: &HyperPlonkVerifierParam<E::G1Affine>,
+    circuit: &T,
+) -> Result<HyperPlonkProverParam<E::G1Affine>, crate::Error> {
+    let k = params.get_k();
+    let circuit_info = frontend::halo2::get_circuit_info::<E, T>(k, circuit)?;
+
+    let preprocess_polys = circuit_info
+        .preprocess_polys
+        .iter()
+        .cloned()
+        .map(MultilinearPolynomial::new)
+        .collect_vec();
+
+    let permutation_polys = preprocessor::permutation_polys(
+        k as usize,
+        &circuit_info.permutation_polys(),
+        &circuit_info.permutations,
+    );
+
+    Ok(HyperPlonkProverParam {
+        vk: vk.clone(),
+        lookups: circuit_info.lookups.clone(),
+        preprocess_polys,
+        permutation_polys: circuit_info
+            .permutation_polys()
+            .into_iter()
+            .zip(permutation_polys)
+            .collect(),
     })
 }
 

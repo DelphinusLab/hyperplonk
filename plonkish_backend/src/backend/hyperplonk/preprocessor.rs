@@ -106,20 +106,14 @@ pub(crate) fn preprocess<
         permutation_comms: permutation_comms.clone(),
     };
     let pp = HyperPlonkProverParam::<C> {
-        num_instances: circuit_info.num_instances,
-        num_witness_polys: circuit_info.num_witness_polys,
+        vk: vp.clone(),
         lookups: circuit_info.lookups.clone(),
-        num_permutation_z_polys,
-        num_vars,
-        expression,
         preprocess_polys,
-        preprocess_comms,
         permutation_polys: circuit_info
             .permutation_polys()
             .into_iter()
             .zip(permutation_polys)
             .collect(),
-        permutation_comms,
     };
     let ps = HyperPlonkProverSetupParam { pcs: pcs_pp };
     let vs = HyperPlonkVerifierSetupParam { pcs: pcs_vp };

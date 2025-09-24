@@ -107,11 +107,7 @@ pub struct UnivariateKzgProverParam<M: MultiMillerLoop> {
 }
 
 impl<M: MultiMillerLoop> UnivariateKzgProverParam<M> {
-    pub(crate) fn new(
-        k: usize,
-        monomial_g1: Vec<M::G1Affine>,
-        lagrange_g1: Vec<M::G1Affine>,
-    ) -> Self {
+    pub fn new(k: usize, monomial_g1: Vec<M::G1Affine>, lagrange_g1: Vec<M::G1Affine>) -> Self {
         Self {
             k,
             monomial_g1,

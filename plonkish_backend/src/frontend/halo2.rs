@@ -108,7 +108,6 @@ pub fn get_circuit_info<E: MultiMillerLoop, T: Circuit<E::Scalar>>(
         &Lexical::new(k as usize).usable_indices(),
         permutation_column_idx,
         circuit,
-        // config,
     )
     .map_err(|e| {
         crate::Error::InvalidSnark(format!(
