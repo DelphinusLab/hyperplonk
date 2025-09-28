@@ -21,6 +21,7 @@ use std::{
 pub enum UnivariateBasis {
     Monomial,
     Lagrange,
+    CrossBasis,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -127,6 +128,15 @@ impl<F: Field> UnivariatePolynomial<F> {
 
         Self {
             basis: Lagrange,
+            coeffs,
+        }
+    }
+
+    pub fn cross_basis(coeffs: Vec<F>) -> Self {
+        assert!(coeffs.len().is_power_of_two());
+
+        Self {
+            basis: CrossBasis,
             coeffs,
         }
     }
@@ -269,6 +279,9 @@ impl<F: Field, P: Borrow<UnivariatePolynomial<F>>> AddAssign<P> for UnivariatePo
                     }
                 });
             }
+            CrossBasis => {
+                unreachable!()
+            }
         }
     }
 }
@@ -318,6 +331,9 @@ impl<F: Field, BF: Borrow<F>, P: Borrow<UnivariatePolynomial<F>>> AddAssign<(BF,
                             *lhs += scalar * rhs;
                         }
                     });
+                }
+                CrossBasis => {
+                    unreachable!()
                 }
             }
         }
@@ -369,6 +385,9 @@ impl<F: Field, P: Borrow<UnivariatePolynomial<F>>> SubAssign<P> for UnivariatePo
                         *lhs -= rhs;
                     }
                 });
+            }
+            CrossBasis => {
+                unreachable!()
             }
         }
     }
@@ -466,6 +485,9 @@ impl<F: Field> MulAssign<F> for UnivariatePolynomial<F> {
             match self.basis {
                 Monomial => self.coeffs.clear(),
                 Lagrange => self.coeffs.fill(F::zero()),
+                CrossBasis => {
+                    unreachable!()
+                }
             }
             // make sure zero poly is processed correctly at Monomial base
             if self.basis == Monomial {

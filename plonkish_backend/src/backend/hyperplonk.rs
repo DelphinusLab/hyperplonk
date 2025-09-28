@@ -250,7 +250,11 @@ where
             .collect_vec();
         assert_eq!(polys.len(), pp.vk.num_witness_polys);
         end_timer(timer);
+        for (_, idx) in circuit.circuit_info().unwrap().named_witnesses.iter() {
+            Pcs::commit_cross_and_write(&ps.pcs, &polys[*idx as usize], transcript)?;
+        }
         witness_comms.extend(Pcs::batch_commit_and_write(&ps.pcs, &polys, transcript)?);
+
         witness_polys.extend(polys);
         let polys = chain![&instance_polys, &pp.preprocess_polys, &witness_polys].collect_vec();
 
@@ -363,6 +367,8 @@ where
 
         let mut witness_comms = Vec::with_capacity(vp.num_witness_polys);
         let mut challenges = Vec::with_capacity(4);
+        //just read the cross commitments for challenge compute
+        Pcs::read_commitments(&vs.pcs, vp.named_advices.len(), transcript)?;
         witness_comms.extend(Pcs::read_commitments(
             &vs.pcs,
             vp.num_witness_polys,

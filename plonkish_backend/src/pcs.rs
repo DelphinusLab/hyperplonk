@@ -55,6 +55,23 @@ pub trait PolynomialCommitmentScheme<F: Field>: Clone + Debug {
         Ok(comm)
     }
 
+    fn commit_cross_basis(
+        _pp: &Self::ProverParam,
+        _poly: &Self::Polynomial,
+    ) -> Result<Self::Commitment, Error> {
+        unimplemented!()
+    }
+
+    fn commit_cross_and_write(
+        pp: &Self::ProverParam,
+        poly: &Self::Polynomial,
+        transcript: &mut impl TranscriptWrite<Self::CommitmentChunk, F>,
+    ) -> Result<Self::Commitment, Error> {
+        let comm = Self::commit_cross_basis(pp, poly)?;
+        transcript.write_commitments(comm.as_ref())?;
+        Ok(comm)
+    }
+
     fn batch_commit<'a>(
         pp: &Self::ProverParam,
         polys: impl IntoIterator<Item = &'a Self::Polynomial>,

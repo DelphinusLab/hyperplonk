@@ -37,6 +37,17 @@ impl<M: MultiMillerLoop> UnivariateKzg<M> {
         let comm = variable_base_msm(evals, &pp.lagrange_g1[..evals.len()]).into();
         UnivariateKzgCommitment(comm)
     }
+
+    pub(crate) fn commit_cross_basis(
+        pp: &UnivariateKzgProverParam<M>,
+        evals: &[M::Scalar],
+    ) -> UnivariateKzgCommitment<M::G1Affine> {
+        let comm_raw = evals.iter().fold(M::Scalar::zero(), |acc, e| acc + e);
+        let comm_raw = pp.monomial_g1[0] * comm_raw;
+        let comm = variable_base_msm(evals, &pp.cross_basis_g1.as_ref().unwrap()[..evals.len()]);
+
+        UnivariateKzgCommitment((comm + comm_raw).into())
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -49,6 +60,9 @@ pub struct UnivariateKzgParam<M: MultiMillerLoop> {
     monomial_g1: Vec<M::G1Affine>,
     lagrange_g1: Vec<M::G1Affine>,
     powers_of_s_g2: Vec<M::G2Affine>,
+
+    cross_basic_g1: Option<Vec<M::G1Affine>>,
+    sum_inv_sl_g2: Option<M::G2Affine>,
 }
 
 impl<M: MultiMillerLoop> UnivariateKzgParam<M> {
@@ -57,13 +71,18 @@ impl<M: MultiMillerLoop> UnivariateKzgParam<M> {
         monomial_g1: Vec<M::G1Affine>,
         lagrange_g1: &Vec<M::G1Affine>,
         s_g2: M::G2Affine,
+        cross_basic_g1: &Vec<M::G1Affine>,
+        sum_inv_sl_g2: M::G2Affine,
     ) -> Self {
         let lag_g1 = lagrange_g1.iter().map(|v| v.clone()).collect::<Vec<_>>();
+        let cross_basic_g1 = cross_basic_g1.iter().map(|v| v.clone()).collect::<Vec<_>>();
         let g2 = M::G2Affine::generator();
         UnivariateKzgParam {
             k,
             monomial_g1,
             lagrange_g1: lag_g1,
+            cross_basic_g1: Some(cross_basic_g1),
+            sum_inv_sl_g2: Some(sum_inv_sl_g2),
             powers_of_s_g2: vec![g2, s_g2],
         }
     }
@@ -93,6 +112,14 @@ impl<M: MultiMillerLoop> UnivariateKzgParam<M> {
     pub fn powers_of_s_g2(&self) -> &[M::G2Affine] {
         &self.powers_of_s_g2
     }
+
+    pub fn cross_basis_g1(&self) -> &Option<Vec<M::G1Affine>> {
+        &self.cross_basic_g1
+    }
+
+    pub fn sum_inv_sl_g2(&self) -> &Option<M::G2Affine> {
+        &self.sum_inv_sl_g2
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -104,14 +131,21 @@ pub struct UnivariateKzgProverParam<M: MultiMillerLoop> {
     k: usize,
     monomial_g1: Vec<M::G1Affine>,
     lagrange_g1: Vec<M::G1Affine>,
+    cross_basis_g1: Option<Vec<M::G1Affine>>,
 }
 
 impl<M: MultiMillerLoop> UnivariateKzgProverParam<M> {
-    pub fn new(k: usize, monomial_g1: Vec<M::G1Affine>, lagrange_g1: Vec<M::G1Affine>) -> Self {
+    pub fn new(
+        k: usize,
+        monomial_g1: Vec<M::G1Affine>,
+        lagrange_g1: Vec<M::G1Affine>,
+        cross_basis_g1: Option<Vec<M::G1Affine>>,
+    ) -> Self {
         Self {
             k,
             monomial_g1,
             lagrange_g1,
+            cross_basis_g1,
         }
     }
 
@@ -134,6 +168,10 @@ impl<M: MultiMillerLoop> UnivariateKzgProverParam<M> {
     pub fn lagrange_g1(&self) -> &[M::G1Affine] {
         &self.lagrange_g1
     }
+
+    pub fn cross_basis_g1(&self) -> &Option<Vec<M::G1Affine>> {
+        &self.cross_basis_g1
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -141,11 +179,22 @@ pub struct UnivariateKzgVerifierParam<M: MultiMillerLoop> {
     g1: M::G1Affine,
     g2: M::G2Affine,
     s_g2: M::G2Affine,
+    sum_inv_sl_g2: Option<M::G2Affine>,
 }
 
 impl<M: MultiMillerLoop> UnivariateKzgVerifierParam<M> {
-    pub fn new(g1: M::G1Affine, g2: M::G2Affine, s_g2: M::G2Affine) -> Self {
-        Self { g1, g2, s_g2 }
+    pub fn new(
+        g1: M::G1Affine,
+        g2: M::G2Affine,
+        s_g2: M::G2Affine,
+        sum_inv_sl_g2: Option<M::G2Affine>,
+    ) -> Self {
+        Self {
+            g1,
+            g2,
+            s_g2,
+            sum_inv_sl_g2,
+        }
     }
 
     pub fn g1(&self) -> M::G1Affine {
@@ -158,6 +207,10 @@ impl<M: MultiMillerLoop> UnivariateKzgVerifierParam<M> {
 
     pub fn s_g2(&self) -> M::G2Affine {
         self.s_g2
+    }
+
+    pub fn sum_inv_sl_g2(&self) -> Option<M::G2Affine> {
+        self.sum_inv_sl_g2
     }
 }
 
@@ -235,14 +288,22 @@ where
             let monomial = powers(s).take(poly_size).collect_vec();
             let monomial_g1 =
                 batch_projective_to_affine(&fixed_base_msm(window_size, &window_table, &monomial));
-            let lagrange_g1 = {
+            let (lagrange_g1, _lagrange_scalars) = {
                 let k = poly_size.ilog2() as usize;
                 let n_inv = M::Scalar::TWO_INV.pow_vartime([k as u64]);
                 let mut lagrange = monomial;
                 radix2_fft(&mut lagrange, root_of_unity_inv(k), k);
                 lagrange.iter_mut().for_each(|v| *v *= n_inv);
-                batch_projective_to_affine(&fixed_base_msm(window_size, &window_table, &lagrange))
+                (
+                    batch_projective_to_affine(&fixed_base_msm(
+                        window_size,
+                        &window_table,
+                        &lagrange,
+                    )),
+                    lagrange,
+                )
             };
+
             (monomial_g1, lagrange_g1)
         };
 
@@ -258,6 +319,8 @@ where
             monomial_g1,
             lagrange_g1,
             powers_of_s_g2,
+            cross_basic_g1: None,
+            sum_inv_sl_g2: None,
         })
     }
 
@@ -278,11 +341,17 @@ where
             monomial_g_to_lagrange_g(&monomial_g1)
         };
 
-        let pp = Self::ProverParam::new(poly_size.ilog2() as usize, monomial_g1, lagrange_g1);
+        let pp = Self::ProverParam::new(
+            poly_size.ilog2() as usize,
+            monomial_g1,
+            lagrange_g1,
+            param.cross_basic_g1.clone(),
+        );
         let vp = Self::VerifierParam {
             g1: param.g1(),
             g2: param.g2(),
             s_g2: param.powers_of_s_g2[1],
+            sum_inv_sl_g2: param.sum_inv_sl_g2,
         };
         Ok((pp, vp))
     }
@@ -293,6 +362,7 @@ where
         match poly.basis() {
             Monomial => Ok(Self::commit_monomial(pp, poly.coeffs())),
             Lagrange => Ok(Self::commit_lagrange(pp, poly.coeffs())),
+            CrossBasis => Ok(Self::commit_cross_basis(pp, poly.coeffs())),
         }
     }
 

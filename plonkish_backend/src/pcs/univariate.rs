@@ -60,6 +60,9 @@ fn validate_input<'a, F: Field>(
                     return Err(err_invalid_evals_len(param_degree, poly.coeffs().len() - 1));
                 }
             }
+            CrossBasis => {
+                unreachable!()
+            }
         }
     }
     Ok(())

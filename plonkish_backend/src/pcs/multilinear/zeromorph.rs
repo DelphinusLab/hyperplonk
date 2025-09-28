@@ -106,7 +106,18 @@ where
         let open_pp = {
             let monomial_g1 = param.monomial_g1()[offset..].to_vec();
             let lagrange_g1 = param.lagrange_g1()[offset..].to_vec();
-            UnivariateKzgProverParam::new(poly_size.ilog2() as usize, monomial_g1, lagrange_g1)
+            // let cross_g1 = param.
+            let cross_g1 = if let Some(cross_basis_g1) = param.cross_basis_g1() {
+                Some(cross_basis_g1[offset..].to_vec())
+            } else {
+                None
+            };
+            UnivariateKzgProverParam::new(
+                poly_size.ilog2() as usize,
+                monomial_g1,
+                lagrange_g1,
+                cross_g1,
+            )
         };
         // let s_offset_g2 = param.powers_of_s_g2()[offset];
 
@@ -123,6 +134,21 @@ where
         }
 
         Ok(UnivariateKzg::commit_monomial(&pp.commit_pp, poly.evals()))
+    }
+
+    fn commit_cross_basis(
+        pp: &Self::ProverParam,
+        poly: &Self::Polynomial,
+    ) -> Result<Self::Commitment, Error> {
+        if pp.degree() + 1 < poly.evals().len() {
+            let got = poly.evals().len() - 1;
+            return Err(err_too_large_deree("commit", pp.degree(), got));
+        }
+
+        Ok(UnivariateKzg::commit_cross_basis(
+            &pp.commit_pp,
+            poly.evals(),
+        ))
     }
 
     fn batch_commit<'a>(
