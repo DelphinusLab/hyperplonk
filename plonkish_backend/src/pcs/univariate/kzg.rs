@@ -42,11 +42,9 @@ impl<M: MultiMillerLoop> UnivariateKzg<M> {
         pp: &UnivariateKzgProverParam<M>,
         evals: &[M::Scalar],
     ) -> UnivariateKzgCommitment<M::G1Affine> {
-        let comm_raw = evals.iter().fold(M::Scalar::zero(), |acc, e| acc + e);
-        let comm_raw = pp.monomial_g1[0] * comm_raw;
+        //evals*r(c+l)G1
         let comm = variable_base_msm(evals, &pp.cross_basis_g1.as_ref().unwrap()[..evals.len()]);
-
-        UnivariateKzgCommitment((comm + comm_raw).into())
+        UnivariateKzgCommitment(comm.into())
     }
 }
 
@@ -61,8 +59,7 @@ pub struct UnivariateKzgParam<M: MultiMillerLoop> {
     lagrange_g1: Vec<M::G1Affine>,
     powers_of_s_g2: Vec<M::G2Affine>,
 
-    cross_basic_g1: Option<Vec<M::G1Affine>>,
-    sum_inv_sl_g2: Option<M::G2Affine>,
+    cross_basis_g1: Option<Vec<M::G1Affine>>,
 }
 
 impl<M: MultiMillerLoop> UnivariateKzgParam<M> {
@@ -71,18 +68,16 @@ impl<M: MultiMillerLoop> UnivariateKzgParam<M> {
         monomial_g1: Vec<M::G1Affine>,
         lagrange_g1: &Vec<M::G1Affine>,
         s_g2: M::G2Affine,
-        cross_basic_g1: &Vec<M::G1Affine>,
-        sum_inv_sl_g2: M::G2Affine,
+        cross_basis_g1: &Vec<M::G1Affine>,
     ) -> Self {
         let lag_g1 = lagrange_g1.iter().map(|v| v.clone()).collect::<Vec<_>>();
-        let cross_basic_g1 = cross_basic_g1.iter().map(|v| v.clone()).collect::<Vec<_>>();
+        let cross_basis_g1 = cross_basis_g1.iter().map(|v| v.clone()).collect::<Vec<_>>();
         let g2 = M::G2Affine::generator();
         UnivariateKzgParam {
             k,
             monomial_g1,
             lagrange_g1: lag_g1,
-            cross_basic_g1: Some(cross_basic_g1),
-            sum_inv_sl_g2: Some(sum_inv_sl_g2),
+            cross_basis_g1: Some(cross_basis_g1),
             powers_of_s_g2: vec![g2, s_g2],
         }
     }
@@ -114,11 +109,7 @@ impl<M: MultiMillerLoop> UnivariateKzgParam<M> {
     }
 
     pub fn cross_basis_g1(&self) -> &Option<Vec<M::G1Affine>> {
-        &self.cross_basic_g1
-    }
-
-    pub fn sum_inv_sl_g2(&self) -> &Option<M::G2Affine> {
-        &self.sum_inv_sl_g2
+        &self.cross_basis_g1
     }
 }
 
@@ -179,22 +170,11 @@ pub struct UnivariateKzgVerifierParam<M: MultiMillerLoop> {
     g1: M::G1Affine,
     g2: M::G2Affine,
     s_g2: M::G2Affine,
-    sum_inv_sl_g2: Option<M::G2Affine>,
 }
 
 impl<M: MultiMillerLoop> UnivariateKzgVerifierParam<M> {
-    pub fn new(
-        g1: M::G1Affine,
-        g2: M::G2Affine,
-        s_g2: M::G2Affine,
-        sum_inv_sl_g2: Option<M::G2Affine>,
-    ) -> Self {
-        Self {
-            g1,
-            g2,
-            s_g2,
-            sum_inv_sl_g2,
-        }
+    pub fn new(g1: M::G1Affine, g2: M::G2Affine, s_g2: M::G2Affine) -> Self {
+        Self { g1, g2, s_g2 }
     }
 
     pub fn g1(&self) -> M::G1Affine {
@@ -207,10 +187,6 @@ impl<M: MultiMillerLoop> UnivariateKzgVerifierParam<M> {
 
     pub fn s_g2(&self) -> M::G2Affine {
         self.s_g2
-    }
-
-    pub fn sum_inv_sl_g2(&self) -> Option<M::G2Affine> {
-        self.sum_inv_sl_g2
     }
 }
 
@@ -319,8 +295,7 @@ where
             monomial_g1,
             lagrange_g1,
             powers_of_s_g2,
-            cross_basic_g1: None,
-            sum_inv_sl_g2: None,
+            cross_basis_g1: None,
         })
     }
 
@@ -345,13 +320,12 @@ where
             poly_size.ilog2() as usize,
             monomial_g1,
             lagrange_g1,
-            param.cross_basic_g1.clone(),
+            param.cross_basis_g1.clone(),
         );
         let vp = Self::VerifierParam {
             g1: param.g1(),
             g2: param.g2(),
             s_g2: param.powers_of_s_g2[1],
-            sum_inv_sl_g2: param.sum_inv_sl_g2,
         };
         Ok((pp, vp))
     }
