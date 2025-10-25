@@ -12,7 +12,7 @@ use std::{
     io::{self, Cursor},
 };
 
-pub mod poseidon;
+// pub mod poseidon;
 mod util;
 
 pub trait FieldTranscript<F> {

@@ -546,6 +546,7 @@ dependencies = [
 [[package]]
 name = "halo2_proofs"
 version = "0.1.0-beta.1"
+source = "git+https://github.com/DelphinusLab/halo2-gpu-specific.git?branch=moore/support_hyperplonk#41925f30f800e770a3b9af203c091373fc4bc6d8"
 dependencies = [
  "ark-std",
  "blake2b_simd",
@@ -987,7 +988,6 @@ dependencies = [
  "num-integer",
  "num-traits",
  "paste",
- "poseidon",
  "pprof",
  "rand",
  "rayon",
@@ -1021,15 +1021,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51bae2ac328883f7acdfea3d66a7c35751187f870bc81f94563733a154d7a670"
 dependencies = [
  "plotters-backend",
-]
-
-[[package]]
-name = "poseidon"
-version = "0.2.0"
-source = "git+https://github.com/DelphinusLab/poseidon.git#8977ca390f50cdbd2496970216dfc1060b2caab9"
-dependencies = [
- "halo2_proofs",
- "subtle",
 ]
 
 [[package]]
