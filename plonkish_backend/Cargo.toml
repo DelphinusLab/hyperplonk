@@ -35,7 +35,7 @@ criterion = "0.4.0"
 pprof = { version = "0.11.0", features = ["criterion", "flamegraph"] }
 
 [features]
-default = ["parallel", "frontend-halo2", "timer", "sanity-check"]
+default = ["parallel", "frontend-halo2", "timer"]
 
 timer = ["dep:ark-std", "ark-std?/print-trace", "halo2_proofs?/profile"]
 parallel = ["dep:rayon"]

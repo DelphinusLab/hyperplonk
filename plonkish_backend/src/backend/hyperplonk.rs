@@ -250,7 +250,7 @@ where
             .collect_vec();
         assert_eq!(polys.len(), pp.vk.num_witness_polys);
         end_timer(timer);
-        for (_, idx) in circuit.circuit_info().unwrap().named_witnesses.iter() {
+        for (_, idx) in pp.vk.named_advices.iter() {
             Pcs::commit_cross_and_write(&ps.pcs, &polys[*idx as usize], transcript)?;
         }
         witness_comms.extend(Pcs::batch_commit_and_write(&ps.pcs, &polys, transcript)?);
